@@ -1,0 +1,186 @@
+package com.livehouse.service.impl;
+
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.livehouse.dto.Result;
+import com.livehouse.entity.CheckInRecord;
+import com.livehouse.entity.ElectronicTicket;
+import com.livehouse.entity.TicketOrder;
+import com.livehouse.mapper.ElectronicTicketMapper;
+import com.livehouse.service.ICheckInRecordService;
+import com.livehouse.service.IElectronicTicketService;
+import com.livehouse.service.ITicketOrderService;
+import com.livehouse.utils.RedisIDGenerator;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 电子票服务实现
+ */
+@Slf4j
+@Service
+public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMapper, ElectronicTicket> 
+        implements IElectronicTicketService {
+
+    @Autowired
+    private ITicketOrderService ticketOrderService;
+
+    @Autowired
+    private ICheckInRecordService checkInRecordService;
+
+    @Autowired
+    private RedisIDGenerator redisIDGenerator;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Override
+    @Transactional
+    public Result generateElectronicTickets(Long orderId) {
+        log.info("开始为订单生成电子票，订单ID：{}", orderId);
+
+        // 1. 查询订单信息
+        TicketOrder order = ticketOrderService.getById(orderId);
+        if (order == null) {
+            return Result.fail("订单不存在");
+        }
+
+        if (order.getPayStatus() != 1) {
+            return Result.fail("订单未支付，无法生成电子票");
+        }
+
+        // 2. 检查是否已生成电子票
+        List<ElectronicTicket> existingTickets = lambdaQuery()
+                .eq(ElectronicTicket::getOrderId, orderId)
+                .list();
+        
+        if (!existingTickets.isEmpty()) {
+            log.info("订单已生成电子票，订单ID：{}，电子票数量：{}", orderId, existingTickets.size());
+            return Result.ok(existingTickets);
+        }
+
+        // 3. 批量生成电子票
+        List<ElectronicTicket> electronicTickets = new ArrayList<>();
+        for (int i = 0; i < order.getQuantity(); i++) {
+            // 生成雪花算法电子票号
+            Long ticketId = redisIDGenerator.getId("electronic_ticket");
+            String ticketCode = "ET" + ticketId;
+
+            ElectronicTicket ticket = new ElectronicTicket();
+            ticket.setId(ticketId);
+            ticket.setVerifyCode(ticketCode);
+            ticket.setOrderId(orderId);
+            ticket.setUserId(order.getUserId());
+            ticket.setShowId(order.getShowId());
+            ticket.setTicketTypeId(order.getTicketTypeId());
+            ticket.setVerifyStatus(0);
+            ticket.setCreateTime(LocalDateTime.now());
+
+            electronicTickets.add(ticket);
+        }
+
+        // 4. 批量保存到数据库
+        boolean saveSuccess = saveBatch(electronicTickets);
+        if (!saveSuccess) {
+            return Result.fail("生成电子票失败");
+        }
+
+        log.info("电子票生成成功，订单ID：{}，生成数量：{}", orderId, electronicTickets.size());
+        return Result.ok(electronicTickets);
+    }
+
+    /**
+     *
+     * @param ticketCode 电子票号，就是verify_code，verify_code = “ET” + 电子票id
+     *
+     * 实际业务流程：
+     * 用户买票 → 获得电子票号（相当于纸质票）
+     * 到达现场 → 出示电子票号（相当于出示票据）
+     * 工作人员核销 → 扫码验证（相当于撕票/打孔）
+     * 核销成功 → 允许入场（相当于通过检票口）
+     * 防重复使用 → 已核销票无法再用（相当于撕掉的票不能重复使用）
+     */
+    @Override
+    @Transactional
+    public Result verifyTicket(String ticketCode) {
+        log.info("开始核销电子票，票号：{}", ticketCode);
+
+        // 1. 查询电子票信息
+        ElectronicTicket ticket = lambdaQuery()
+                .eq(ElectronicTicket::getVerifyCode, ticketCode)
+                .one();
+
+        if (ticket == null) {
+            return Result.fail("电子票不存在");
+        }
+
+        if (ticket.getVerifyStatus() == 1) {
+            return Result.fail("电子票已核销");
+        }
+
+        // 2. Redis BitMap 原子性核销检查
+        String bitmapKey = "ticket:verify:" + ticket.getShowId();
+        Long ticketPosition = ticket.getId() % 1000000; // 取后6位作为setBit（1）的位。
+
+        // 3. 原子性设置BitMap标记（核心逻辑）
+        // 成功，返回0，失败返回1，0 对应 false 1 对应 true
+        Boolean previousValue = stringRedisTemplate.opsForValue().setBit(bitmapKey, ticketPosition, true);
+        
+        if (Boolean.TRUE.equals(previousValue)) {
+            log.warn("电子票已核销，票号：{}", ticketCode);
+            return Result.fail("电子票已经被使用过！");
+        }
+
+        try {
+            // 4. 更新数据库状态
+            ticket.setVerifyStatus(1);
+            ticket.setVerifyTime(LocalDateTime.now());
+            updateById(ticket);
+
+            // 5. 记录核销日志
+            CheckInRecord record = new CheckInRecord();
+            record.setTicketId(ticket.getId());
+            record.setUserId(ticket.getUserId());
+            record.setShowId(ticket.getShowId());
+            record.setCheckTime(LocalDateTime.now());
+            checkInRecordService.save(record);
+
+            log.info("电子票核销成功，票号：{}", ticketCode);
+            return Result.ok("核销成功");
+
+        } catch (Exception e) {
+            // 异常回滚：清除BitMap标记
+            stringRedisTemplate.opsForValue().setBit(bitmapKey, ticketPosition, false);
+            log.error("电子票核销失败，已回滚，票号：{}", ticketCode, e);
+            return Result.fail("核销失败");
+        }
+    }
+
+    @Override
+    public Result getTicketByCode(String ticketCode) {
+        ElectronicTicket ticket = lambdaQuery()
+                .eq(ElectronicTicket::getVerifyCode, ticketCode)
+                .one();
+
+        if (ticket == null) {
+            return Result.fail("电子票不存在");
+        }
+
+        return Result.ok(ticket);
+    }
+
+    @Override
+    public Result queryUserTickets(Long userId) {
+        List<ElectronicTicket> tickets = lambdaQuery()
+                .eq(ElectronicTicket::getUserId, userId)
+                .orderByDesc(ElectronicTicket::getCreateTime)
+                .list();
+        return Result.ok(tickets);
+    }
+}
