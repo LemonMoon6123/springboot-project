@@ -1,8 +1,8 @@
 package com.livehouse.config;
 
 import com.livehouse.interceptor.RateLimitInterceptor;
-import com.livehouse.utils.LoginInterceptor;
-import com.livehouse.utils.RefreshTokenInterceptor;
+import com.livehouse.interceptor.LoginInterceptor;
+import com.livehouse.interceptor.RefreshTokenInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
