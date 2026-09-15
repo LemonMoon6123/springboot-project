@@ -1,8 +1,9 @@
-package com.livehouse.utils;
+package com.livehouse.interceptor;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.livehouse.dto.UserDTO;
+import com.livehouse.utils.UserHolder;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.servlet.HandlerInterceptor;
 

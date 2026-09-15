@@ -1,5 +1,6 @@
-package com.livehouse.utils;
+package com.livehouse.interceptor;
 
+import com.livehouse.utils.UserHolder;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import javax.servlet.http.HttpServletRequest;
