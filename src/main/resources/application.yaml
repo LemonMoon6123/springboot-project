@@ -24,9 +24,16 @@ spring:
     username: guest
     password: guest
     virtual-host: /
+    publisher-confirms: true
+    publisher-returns: true
     listener:
       simple:
-        acknowledge-mode: manual
+        acknowledge-mode: auto
+        concurrency: 5
+        max-concurrency: 10
+        retry:
+          enabled: true
+          max-attempts: 3
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
 mybatis-plus:
@@ -34,3 +41,8 @@ mybatis-plus:
 logging:
   level:
     com.livehouse: debug
+
+livehouse:
+  upload:
+    dir: frontend-livehouse/uploads
+    url-prefix: /uploads/

@@ -22,15 +22,21 @@ public class SeckillScriptExecutor {
     private StringRedisTemplate stringRedisTemplate;
 
     private DefaultRedisScript<Long> seckillScript;
+    private DefaultRedisScript<Long> restoreStockScript;
 
     @PostConstruct
     public void init() {
-        // 初始化Lua脚本
+        // 初始化秒杀Lua脚本
         seckillScript = new DefaultRedisScript<>();
         seckillScript.setLocation(new ClassPathResource("seckill_ticket.lua"));
         seckillScript.setResultType(Long.class);
         
-        log.info("秒杀Lua脚本初始化完成");
+        // 初始化归还库存Lua脚本
+        restoreStockScript = new DefaultRedisScript<>();
+        restoreStockScript.setLocation(new ClassPathResource("restore_stock.lua"));
+        restoreStockScript.setResultType(Long.class);
+        
+        log.info("Lua脚本初始化完成");
     }
 
     /**
@@ -60,6 +66,34 @@ public class SeckillScriptExecutor {
         } catch (Exception e) {
             log.error("执行秒杀脚本失败，票种ID：{}，用户ID：{}", ticketTypeId, userId, e);
             return SeckillResult.SYSTEM_ERROR;
+        }
+    }
+
+    /**
+     * 执行归还库存脚本
+     * 
+     * @param ticketTypeId 票种ID
+     * @param userId 用户ID
+     * @param quantity 归还数量
+     * @return 执行结果码：0-成功
+     */
+    public Long executeRestoreStock(Long ticketTypeId, Long userId, Integer quantity) {
+        try {
+            // 执行Lua脚本
+            Long result = stringRedisTemplate.execute(
+                restoreStockScript,
+                Collections.emptyList(),
+                ticketTypeId.toString(),
+                userId.toString(),
+                quantity.toString()
+            );
+            
+            log.info("归还库存成功，票种ID：{}，用户ID：{}，数量：{}", ticketTypeId, userId, quantity);
+            return result != null ? result : 0L;
+            
+        } catch (Exception e) {
+            log.error("执行归还库存脚本失败，票种ID：{}，用户ID：{}", ticketTypeId, userId, e);
+            return -1L;
         }
     }
 

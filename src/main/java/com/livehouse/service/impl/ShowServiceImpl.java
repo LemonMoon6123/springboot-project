@@ -1,6 +1,8 @@
 package com.livehouse.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.livehouse.dto.Result;
@@ -23,6 +25,7 @@ import org.springframework.data.redis.domain.geo.GeoReference;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -236,5 +239,12 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
                 .page(new Page<>(current, DEFAULT_PAGE_SIZE));
                 
         return Result.ok(page.getRecords());
+    }
+
+    @Override
+    public List<Show> listActiveShows(LocalDateTime now) {
+        LambdaQueryWrapper<Show> wrapper = Wrappers.lambdaQuery();
+        wrapper.gt(Show::getEndTime,now);
+        return this.list(wrapper);
     }
 }

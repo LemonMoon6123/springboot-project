@@ -1,10 +1,12 @@
 package com.livehouse.service.impl;
 
 import com.livehouse.dto.Result;
+import com.livehouse.dto.SeckillOrderMessage;
 import com.livehouse.dto.UserDTO;
 import com.livehouse.entity.TicketOrder;
 import com.livehouse.entity.TicketType;
 import com.livehouse.exception.CustomException;
+import com.livehouse.service.IMessageProducerService;
 import com.livehouse.service.ISeckillTicketService;
 import com.livehouse.service.ITicketOrderService;
 import com.livehouse.service.ITicketTypeService;
@@ -18,6 +20,8 @@ import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -46,6 +50,9 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
 
     @Autowired
     private RedissonClient redissonClient;
+
+    @Autowired
+    private IMessageProducerService messageProducerService;
 
     /**
      *
@@ -117,13 +124,26 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
             // 2.6 标记用户有待支付订单（设置30分钟过期）
             stringRedisTemplate.opsForValue().set(userOrderStatusKey, "PENDING", Duration.ofMinutes(30));
 
+            // 2.7 Lua脚本成功，发送消息到队列异步创建订单
             try {
-                // 2.7 创建订单（TODO 这里应该发送到消息队列异步处理,现在只能都交给java程序执行业务流程。）
-                Long orderId = createTicketOrder(ticketTypeId, userId, quantity, ticketType);
-                return Result.ok(orderId);
-            }catch (Exception e) {
-                log.error("创建订单失败，票种ID：{}，用户ID：{}", ticketTypeId, userId, e);
-                // 2.8 订单创建失败时，需要恢复redis库存
+                SeckillOrderMessage orderMessage = new SeckillOrderMessage(
+                    userId, 
+                    ticketType.getShowId(),
+                    ticketTypeId, 
+                    quantity, 
+                    ticketType.getPrice().multiply(new BigDecimal(quantity)),
+                    ticketType.getName(),
+                    ticketType.getPrice()
+                );
+                
+                messageProducerService.sendSeckillOrderMessage(orderMessage);
+                
+                log.info("秒杀成功，已发送订单消息，用户ID：{}，票种ID：{}", userId, ticketTypeId);
+                return Result.ok("抢票成功！正在生成订单，请稍后查看...");
+                
+            } catch (Exception e) {
+                log.error("发送订单消息失败，恢复Redis库存，用户ID：{}，票种ID：{}", userId, ticketTypeId, e);
+                // 消息发送失败，需要恢复Redis库存
                 restoreStock(ticketTypeId, userId, quantity);
                 return Result.fail("系统繁忙，请稍后再试！");
             }

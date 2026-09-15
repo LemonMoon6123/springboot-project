@@ -34,12 +34,15 @@ public class TicketStockLoader implements ApplicationRunner {
         
         try {
             // 1. 查询所有在售的票种
-            List<TicketType> ticketTypes = ticketTypeService.query()
-                    .le("sale_start_time", LocalDateTime.now()) // 开售时间已到
-                    .and(wrapper -> wrapper.isNull("sale_end_time") // 无结束时间
-                            .or()
-                            .gt("sale_end_time", LocalDateTime.now())) // 或未到结束时间
-                    .gt("left_stock", 0) // 有剩余库存
+//            List<TicketType> ticketTypes = ticketTypeService.query()
+//                    .le("sale_start_time", LocalDateTime.now()) // 开售时间已到
+//                    .and(wrapper -> wrapper.isNull("sale_end_time") // 无结束时间
+//                            .or()
+//                            .gt("sale_end_time", LocalDateTime.now())) // 或未到结束时间
+//                    .gt("left_stock", 0) // 有剩余库存
+//                    .list();
+
+            List<TicketType> ticketTypes = ticketTypeService.query().gt("left_stock", 0) // 有剩余库存
                     .list();
 
             if (ticketTypes.isEmpty()) {

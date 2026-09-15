@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.livehouse.dto.Result;
 import com.livehouse.entity.Show;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 /**
  * 演出服务接口
  */
@@ -40,4 +43,9 @@ public interface IShowService extends IService<Show> {
      * @return 演出列表
      */
     Result queryShowByName(String name, Integer current);
+
+    /**
+     * 查询未来和正在进行的演出
+     */
+    List<Show> listActiveShows(LocalDateTime now);
 }

@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Frontend ###
+frontend-livehouse/node_modules/
+frontend-livehouse/dist/
