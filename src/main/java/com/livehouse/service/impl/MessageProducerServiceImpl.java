@@ -2,6 +2,7 @@ package com.livehouse.service.impl;
 
 import com.livehouse.config.RabbitMQConfig;
 import com.livehouse.dto.OrderTimeoutMessage;
+import com.livehouse.dto.RefundMessage;
 import com.livehouse.dto.SeckillOrderMessage;
 import com.livehouse.service.IMessageProducerService;
 import lombok.extern.slf4j.Slf4j;
@@ -27,12 +28,10 @@ public class MessageProducerServiceImpl implements IMessageProducerService {
                 RabbitMQConfig.SECKILL_ROUTING_KEY,
                 message
             );
-            log.info("发送秒杀订单消息成功，用户ID：{}，票种ID：{}", 
-                    message.getUserId(), message.getTicketTypeId());
+            log.info("发送秒杀订单消息成功，用户ID：{}，票种ID：{}", message.getUserId(), message.getTicketTypeId());
         } catch (Exception e) {
-            log.error("发送秒杀订单消息失败，用户ID：{}，票种ID：{}", 
-                    message.getUserId(), message.getTicketTypeId(), e);
-            // 重新抛出异常，让上层知道发送失败
+            log.error("发送秒杀订单消息失败，用户ID：{}，票种ID：{}", message.getUserId(), message.getTicketTypeId(), e);
+            // 重新抛出异常，让上层知道发送失败，上层知道失败异常后，捕获并让前端用户重新试一次。
             throw new RuntimeException("消息发送失败", e);
         }
     }
@@ -50,6 +49,20 @@ public class MessageProducerServiceImpl implements IMessageProducerService {
             log.error("发送订单超时延迟消息失败，订单ID：{}", message.getOrderId(), e);
             // 重新抛出异常，让上层知道发送失败
             throw new RuntimeException("超时消息发送失败", e);
+        }
+    }
+
+    @Override
+    public void sendRefundMessage(RefundMessage message) {
+        try {
+            rabbitTemplate.convertAndSend(
+                RabbitMQConfig.SECKILL_EXCHANGE,
+                RabbitMQConfig.REFUND_ROUTING_KEY,
+                message
+            );
+            log.info("发送退票消息成功，退票记录ID：{}，订单ID：{}", message.getRefundRecordId(), message.getOrderId());
+        } catch (Exception e) {
+            log.error("发送退票消息失败，等待定时任务兜底重试，退票记录ID：{}，订单ID：{}", message.getRefundRecordId(), message.getOrderId(), e);
         }
     }
 }

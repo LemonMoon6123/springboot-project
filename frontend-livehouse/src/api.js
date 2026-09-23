@@ -108,10 +108,15 @@ export const api = {
     return request(`/ticket/simulate-payment/${orderId}`, { method: 'POST' })
   },
   ticketDetail(ticketCode) {
-    return request(`/ticket/detail/${encodeURIComponent(ticketCode)}`)
+    const code = ticketCode ? String(ticketCode).trim() : ''
+    return request(`/ticket/detail?ticketCode=${encodeURIComponent(code)}`)
   },
   verifyTicket(ticketCode) {
-    return request(`/ticket/verify/${encodeURIComponent(ticketCode)}`, { method: 'POST' })
+    const code = ticketCode ? String(ticketCode).trim() : ''
+    return request('/ticket/verify', { 
+      method: 'POST', 
+      body: { ticketCode: code } 
+    })
   },
   myTickets() {
     return request('/ticket/my')
@@ -130,5 +135,31 @@ export const api = {
   },
   rateLimit(ip) {
     return request(`/admin/rate-limit/${encodeURIComponent(ip)}`)
+  },
+
+  // 数据大屏相关API
+  getDataScreenOverview() {
+    return request('/admin/data-screen/overview')
+  },
+  getDataScreenRevenue() {
+    return request('/admin/data-screen/revenue')
+  },
+  getDataScreenShows() {
+    return request('/admin/data-screen/shows')
+  },
+  getDataScreenOrders() {
+    return request('/admin/data-screen/orders')
+  },
+  getDataScreenRateLimit() {
+    return request('/admin/data-screen/rate-limit')
+  },
+  getDataScreenVisits() {
+    return request('/admin/data-screen/visits')
+  },
+  getDataScreenRealtime() {
+    return request('/admin/data-screen/realtime')
+  },
+  getDataScreenAll() {
+    return request('/admin/data-screen/all')
   }
 }

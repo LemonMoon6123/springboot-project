@@ -10,6 +10,7 @@ import com.livehouse.service.ICheckInRecordService;
 import com.livehouse.service.IElectronicTicketService;
 import com.livehouse.service.ITicketOrderService;
 import com.livehouse.utils.RedisIDGenerator;
+import com.livehouse.utils.TicketEncryptionUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -39,6 +40,9 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private TicketEncryptionUtils ticketEncryptionUtils;
 
     @Override
     @Transactional
@@ -70,11 +74,14 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
         for (int i = 0; i < order.getQuantity(); i++) {
             // 生成雪花算法电子票号
             Long ticketId = redisIDGenerator.getId("electronic_ticket");
-            String ticketCode = "ET" + ticketId;
+            String originalTicketCode = "ET" + ticketId;
+
+            // 对票务验证码进行加密，增强安全性
+            String encryptedTicketCode = ticketEncryptionUtils.encryptTicketCode(originalTicketCode);
 
             ElectronicTicket ticket = new ElectronicTicket();
             ticket.setId(ticketId);
-            ticket.setVerifyCode(ticketCode);
+            ticket.setVerifyCode(encryptedTicketCode);  // 存储加密后的验证码
             ticket.setOrderId(orderId);
             ticket.setUserId(order.getUserId());
             ticket.setShowId(order.getShowId());
@@ -83,6 +90,8 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
             ticket.setCreateTime(LocalDateTime.now());
 
             electronicTickets.add(ticket);
+            
+            log.debug("生成电子票，ID：{}，原始码：{}，加密码长度：{}", ticketId, originalTicketCode, encryptedTicketCode.length());
         }
 
         // 4. 批量保存到数据库
@@ -97,7 +106,7 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
 
     /**
      *
-     * @param ticketCode 电子票号，就是verify_code，verify_code = “ET” + 电子票id
+     * ticketCode 电子票号，就是verify_code，verify_code = “ET” + 电子票id
      *
      * 实际业务流程：
      * 用户买票 → 获得电子票号（相当于纸质票）
@@ -108,57 +117,78 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
      */
     @Override
     @Transactional
-    public Result verifyTicket(String ticketCode) {
-        log.info("开始核销电子票，票号：{}", ticketCode);
-
-        // 1. 查询电子票信息
-        ElectronicTicket ticket = lambdaQuery()
-                .eq(ElectronicTicket::getVerifyCode, ticketCode)
-                .one();
-
-        if (ticket == null) {
-            return Result.fail("电子票不存在");
-        }
-
-        if (ticket.getVerifyStatus() == 1) {
-            return Result.fail("电子票已核销");
-        }
-
-        // 2. Redis BitMap 原子性核销检查
-        String bitmapKey = "ticket:verify:" + ticket.getShowId();
-        Long ticketPosition = ticket.getId() % 1000000; // 取后6位作为setBit（1）的位。
-
-        // 3. 原子性设置BitMap标记（核心逻辑）
-        // 成功，返回0，失败返回1，0 对应 false 1 对应 true
-        Boolean previousValue = stringRedisTemplate.opsForValue().setBit(bitmapKey, ticketPosition, true);
-        
-        if (Boolean.TRUE.equals(previousValue)) {
-            log.warn("电子票已核销，票号：{}", ticketCode);
-            return Result.fail("电子票已经被使用过！");
-        }
+    public Result verifyTicket(String encryptedTicketCode) {
+        log.info("开始核销电子票，加密票号长度：{}", encryptedTicketCode.length());
 
         try {
-            // 4. 更新数据库状态
-            ticket.setVerifyStatus(1);
-            ticket.setVerifyTime(LocalDateTime.now());
-            updateById(ticket);
+            // 1. 先解密票号，验证是否是有效的票
+            TicketEncryptionUtils.TicketValidationResult validationResult = 
+                    ticketEncryptionUtils.validateEncryptedTicketCode(encryptedTicketCode);
+            
+            if (!validationResult.isValid()) {
+                log.warn("票号验证失败：{}", validationResult.getErrorMessage());
+                return Result.fail(validationResult.getErrorMessage());
+            }
 
-            // 5. 记录核销日志
-            CheckInRecord record = new CheckInRecord();
-            record.setTicketId(ticket.getId());
-            record.setUserId(ticket.getUserId());
-            record.setShowId(ticket.getShowId());
-            record.setCheckTime(LocalDateTime.now());
-            checkInRecordService.save(record);
+            String originalTicketCode = validationResult.getOriginalTicketCode();
+            log.info("票号解密成功，原始票号：{}", originalTicketCode);
 
-            log.info("电子票核销成功，票号：{}", ticketCode);
-            return Result.ok("核销成功");
+            // 2. 用加密后的票号查询数据库（数据库存的就是加密的）
+            ElectronicTicket ticket = lambdaQuery()
+                    .eq(ElectronicTicket::getVerifyCode, encryptedTicketCode)
+                    .one();
+
+            if (ticket == null) {
+                return Result.fail("电子票不存在");
+            }
+
+            if (ticket.getVerifyStatus() != null && ticket.getVerifyStatus() == 1) {
+                return Result.fail("电子票已核销");
+            }
+
+            if (ticket.getVerifyStatus() != null && ticket.getVerifyStatus() == 2) {
+                return Result.fail("该电子票已退票作废，无法核销");
+            }
+
+            // 3. 用加密票号计算BitMap位置（更安全，基于票号而非ID）
+            String bitmapKey = "ticket:verify:" + ticket.getShowId();
+            long ticketPosition = ticketEncryptionUtils.calculateBitMapOffset(encryptedTicketCode);
+
+            // 4. 原子性设置BitMap标记（核心逻辑）
+            Boolean previousValue = stringRedisTemplate.opsForValue().setBit(bitmapKey, ticketPosition, true);
+            
+            if (Boolean.TRUE.equals(previousValue)) {
+                log.warn("电子票已核销，原始票号：{}", originalTicketCode);
+                return Result.fail("电子票已经被使用过！");
+            }
+
+            try {
+                // 5. 更新数据库状态
+                ticket.setVerifyStatus(1);
+                ticket.setVerifyTime(LocalDateTime.now());
+                updateById(ticket);
+
+                // 6. 记录核销日志
+                CheckInRecord record = new CheckInRecord();
+                record.setTicketId(ticket.getId());
+                record.setUserId(ticket.getUserId());
+                record.setShowId(ticket.getShowId());
+                record.setCheckTime(LocalDateTime.now());
+                checkInRecordService.save(record);
+
+                log.info("电子票核销成功，原始票号：{}", originalTicketCode);
+                return Result.ok("核销成功");
+
+            } catch (Exception e) {
+                // 异常回滚：清除BitMap标记
+                stringRedisTemplate.opsForValue().setBit(bitmapKey, ticketPosition, false);
+                log.error("电子票核销失败，已回滚，原始票号：{}", originalTicketCode, e);
+                return Result.fail("核销失败");
+            }
 
         } catch (Exception e) {
-            // 异常回滚：清除BitMap标记
-            stringRedisTemplate.opsForValue().setBit(bitmapKey, ticketPosition, false);
-            log.error("电子票核销失败，已回滚，票号：{}", ticketCode, e);
-            return Result.fail("核销失败");
+            log.error("票号解密或验证异常：{}", e.getMessage(), e);
+            return Result.fail("票号无效：" + e.getMessage());
         }
     }
 
@@ -183,4 +213,5 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
                 .list();
         return Result.ok(tickets);
     }
+
 }

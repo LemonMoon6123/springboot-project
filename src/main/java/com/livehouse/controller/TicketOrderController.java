@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 票务订单控制器
@@ -72,5 +73,26 @@ public class TicketOrderController {
 
         // 调用模拟支付服务
         return ticketOrderService.simulatePayment(orderId);
+    }
+
+    /**
+     * 申请退票
+     */
+    @PostMapping("/refund/{orderId}")
+    public Result refundOrder(@PathVariable Long orderId, @RequestBody(required = false) Map<String, String> body) {
+        UserDTO user = UserHolder.getUser();
+        String reason = (body != null && body.get("reason") != null && !body.get("reason").trim().isEmpty())
+                ? body.get("reason").trim() : "用户主动申请退票";
+
+        return ticketOrderService.requestRefund(orderId, user.getId(), reason);
+    }
+
+    /**
+     * 查询订单退票记录状态
+     */
+    @GetMapping("/refund/{orderId}")
+    public Result getRefundStatus(@PathVariable Long orderId) {
+        UserDTO user = UserHolder.getUser();
+        return ticketOrderService.getRefundStatus(orderId, user.getId());
     }
 }

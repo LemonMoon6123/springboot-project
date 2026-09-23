@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -97,6 +98,7 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
         // 2.为线程创建分布式锁
         String lockKey = "seckill:lock:" + ticketTypeId + ":" + userId;
         RLock lock = redissonClient.getLock(lockKey);
+
         try {
             // 2.1 尝试获取分布式锁
             boolean getLock = lock.tryLock();
@@ -116,13 +118,15 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
             TicketType ticketType = ticketTypeService.getById(ticketTypeId);
             SeckillScriptExecutor.SeckillResult seckillResult = seckillScriptExecutor.executeSeckill(
                     ticketTypeId, userId, quantity, ticketType.getLimitPerUser());
+
+
             // 2.5 根据脚本执行结果处理
             if (!seckillResult.isSuccess()) {
                 return Result.fail(seckillResult.getMessage());
             }
 
-            // 2.6 标记用户有待支付订单（设置30分钟过期）
-            stringRedisTemplate.opsForValue().set(userOrderStatusKey, "PENDING", Duration.ofMinutes(30));
+            // 2.6 标记用户有待支付订单（设置20分钟过期）
+            stringRedisTemplate.opsForValue().set(userOrderStatusKey, "PENDING", Duration.ofMinutes(20));
 
             // 2.7 Lua脚本成功，发送消息到队列异步创建订单
             try {
@@ -135,18 +139,29 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
                     ticketType.getName(),
                     ticketType.getPrice()
                 );
-                
+
+                /**
+                 * 这里需要做幂等处理，因为经分析存在一个问题：可能会执行若干重复操作，并且这些操作会多次影响业务最终结果，造成很大风险。
+                 * 所以为了避免可能的多次操作所造成的多次不同结果的问题，引入幂等处理，使得多次重复操作依然能保证那一个不变的业务结果。
+                 * 这里的具体实施策略是：向消息实体中引入一个唯一幂等id字段,即使用UUID生成的字符串值。
+                 */
+                // 生成幂等请求ID：一次Lua抢购成功只对应一个requestId，
+                // 供消费者端识别并拦截"同一条消息被重复处理"的情况（防止重复建单/重复归还库存）
+                orderMessage.setRequestId(UUID.randomUUID().toString());
+
                 messageProducerService.sendSeckillOrderMessage(orderMessage);
                 
                 log.info("秒杀成功，已发送订单消息，用户ID：{}，票种ID：{}", userId, ticketTypeId);
                 return Result.ok("抢票成功！正在生成订单，请稍后查看...");
-                
+
             } catch (Exception e) {
                 log.error("发送订单消息失败，恢复Redis库存，用户ID：{}，票种ID：{}", userId, ticketTypeId, e);
-                // 消息发送失败，需要恢复Redis库存
+                // 消息发送失败，需要恢复Redis库存,清除用户下单状态。
                 restoreStock(ticketTypeId, userId, quantity);
+                stringRedisTemplate.delete(userOrderStatusKey);
                 return Result.fail("系统繁忙，请稍后再试！");
             }
+
         }catch (Exception e) {
             return Result.fail("系统繁忙，请稍后再试");
         } finally {
@@ -155,41 +170,6 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
                 lock.unlock();
             }
         }
-    }
-
-    /**
-     * 创建票务订单
-     */
-    @Transactional
-    public Long createTicketOrder(Long ticketTypeId, Long userId, Integer quantity, TicketType ticketType) {
-        // 1. 生成订单ID
-        Long orderId = redisIDGenerator.getId("ticket_order");
-
-        // 2. 创建订单
-        TicketOrder order = new TicketOrder();
-        order.setId(orderId);
-        order.setUserId(userId);
-        order.setShowId(ticketType.getShowId());
-        order.setTicketTypeId(ticketTypeId);
-        order.setQuantity(quantity);
-        order.setAmount(ticketType.getPrice().multiply(new BigDecimal(quantity)));
-
-        // 3. 保存订单
-        ticketOrderService.save(order);
-
-        // 4. 扣减数据库库存（双重保险）
-        boolean success = ticketTypeService.update()
-                .setSql("left_stock = left_stock - " + quantity)
-                .eq("id", ticketTypeId)
-                .gt("left_stock", quantity - 1)
-                .update();
-
-        if (!success) {
-            throw new CustomException("库存不足，订单创建失败");
-        }
-
-        log.info("成功创建订单，订单ID：{}，票种ID：{}，用户ID：{}，数量：{}", orderId, ticketTypeId, userId, quantity);
-        return orderId;
     }
 
     /**

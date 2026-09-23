@@ -27,4 +27,9 @@ public class RedisConstants {
     
     // 地理位置相关
     public static final String VENUE_GEO_KEY = "venue:geo:";
+
+    public static final Long SECKILL_IDEMPOTENT_TTL = 24L; // 单位：小时
+
+    // 退票库存归还幂等（退票记录可能被定时任务重复投递，归还动作需要防重）
+    public static final String REFUND_RESTORED_KEY = "idem:refund:restored:";
 }

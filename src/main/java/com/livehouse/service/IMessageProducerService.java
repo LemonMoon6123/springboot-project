@@ -1,6 +1,7 @@
 package com.livehouse.service;
 
 import com.livehouse.dto.OrderTimeoutMessage;
+import com.livehouse.dto.RefundMessage;
 import com.livehouse.dto.SeckillOrderMessage;
 
 /**
@@ -19,4 +20,10 @@ public interface IMessageProducerService {
      * @param message 订单超时消息
      */
     void sendOrderTimeoutMessage(OrderTimeoutMessage message);
+
+    /**
+     * 发送退票消息（触发异步库存回补）
+     * @param message 退票消息
+     */
+    void sendRefundMessage(RefundMessage message);
 }

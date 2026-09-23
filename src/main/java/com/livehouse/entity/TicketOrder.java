@@ -68,6 +68,12 @@ public class TicketOrder implements Serializable {
     private LocalDateTime payTime;
 
     /**
+     * 幂等请求ID：来源于秒杀成功后发出的MQ消息，用于防止消息重复投递/消费者内部重试
+     * 导致同一次抢购被重复创建订单。数据库层面加唯一索引作为兜底保障。
+     */
+    private String requestId;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createTime;

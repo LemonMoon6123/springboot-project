@@ -86,9 +86,11 @@ CREATE TABLE `tb_ticket_order` (
   `pay_status` tinyint NOT NULL DEFAULT '0' COMMENT '支付状态：0未支付 1已支付 2已取消',
   `order_status` tinyint NOT NULL DEFAULT '1' COMMENT '订单状态：1待支付 2已完成 3已取消 4已退票',
   `pay_time` datetime DEFAULT NULL COMMENT '支付时间',
+  `request_id` varchar(64) DEFAULT NULL COMMENT '幂等请求ID（来自秒杀MQ消息），防止消息重复投递/重试导致重复建单',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_request_id` (`request_id`),
   KEY `idx_user` (`user_id`),
   KEY `idx_show` (`show_id`),
   KEY `idx_status` (`pay_status`, `order_status`)
@@ -105,7 +107,7 @@ CREATE TABLE `tb_electronic_ticket` (
   `show_id` bigint NOT NULL COMMENT '演出ID',
   `ticket_type_id` bigint NOT NULL COMMENT '票种ID',
   `verify_code` varchar(32) NOT NULL COMMENT '核销码',
-  `verify_status` tinyint NOT NULL DEFAULT '0' COMMENT '核销状态：0未核销 1已核销',
+  `verify_status` tinyint NOT NULL DEFAULT '0' COMMENT '核销状态：0未核销 1已核销 2已作废（退票）',
   `verify_time` datetime DEFAULT NULL COMMENT '核销时间',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
@@ -130,6 +132,28 @@ CREATE TABLE `tb_check_in_record` (
   KEY `idx_show` (`show_id`),
   KEY `idx_ticket` (`ticket_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='入场核销记录表';
+
+-- ----------------------------
+-- Table structure for tb_refund_record (退票记录表，本地消息表)
+-- ----------------------------
+DROP TABLE IF EXISTS `tb_refund_record`;
+CREATE TABLE `tb_refund_record` (
+  `id` bigint NOT NULL COMMENT '退票记录ID',
+  `order_id` bigint NOT NULL COMMENT '订单ID',
+  `user_id` bigint NOT NULL COMMENT '用户ID',
+  `show_id` bigint NOT NULL COMMENT '演出ID',
+  `ticket_type_id` bigint NOT NULL COMMENT '票种ID',
+  `quantity` int NOT NULL COMMENT '退票数量',
+  `amount` decimal(10,2) NOT NULL COMMENT '退款金额',
+  `status` tinyint NOT NULL DEFAULT '0' COMMENT '处理状态：0处理中 1已完成 2处理失败（待重试）',
+  `reason` varchar(255) DEFAULT NULL COMMENT '退票原因',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `finish_time` datetime DEFAULT NULL COMMENT '完成时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_order` (`order_id`) COMMENT '同一订单只允许存在一条退票记录',
+  KEY `idx_user` (`user_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='退票记录表（本地消息表，保证库存回补的最终一致性）';
 
 -- ----------------------------
 -- 保留原有用户相关表（复用黑马点评的用户系统）

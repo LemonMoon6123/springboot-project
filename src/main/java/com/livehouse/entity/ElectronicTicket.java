@@ -52,7 +52,7 @@ public class ElectronicTicket implements Serializable {
     private String verifyCode;
 
     /**
-     * 核销状态：0未核销 1已核销
+     * 核销状态：0未核销 1已核销 2已作废（退票）
      */
     private Integer verifyStatus;
 

@@ -143,11 +143,23 @@
           <article v-for="ticket in myTickets" :key="ticket.id" class="ticket-card">
             <div class="ticket-image" :style="posterStyle(showImage(ticket.showId))"></div>
             <div class="ticket-content">
-              <span class="status">{{ ticket.verifyStatus === 1 ? '已使用' : '未使用' }}</span>
-              <h3>{{ showTitle(ticket.showId) }}</h3>
-              <p>{{ ticketName(ticket.ticketTypeId) }}</p>
-              <p class="muted">{{ venueText(ticket.showId) }}</p>
-              <div class="verify-code">{{ ticket.verifyCode }}</div>
+              <div class="ticket-badge-row">
+                <span class="status" :class="{ used: ticket.verifyStatus === 1 }">
+                  {{ ticket.verifyStatus === 1 ? '已核销' : '待核销' }}
+                </span>
+                <span class="ticket-type-label">{{ ticketName(ticket.ticketTypeId) }}</span>
+              </div>
+              <h3 class="ticket-title">{{ showTitle(ticket.showId) }}</h3>
+              <p class="muted ticket-meta">{{ venueText(ticket.showId) }}</p>
+              
+              <div class="ticket-actions">
+                <button 
+                  class="qr-button" 
+                  @click="showQRCode(ticket)" 
+                  :disabled="ticket.verifyStatus === 1">
+                  {{ ticket.verifyStatus === 1 ? '已核销入场' : '点击查看二维码' }}
+                </button>
+              </div>
             </div>
           </article>
         </div>
@@ -225,6 +237,165 @@
             <input v-model="admin.ip" placeholder="127.0.0.1" />
             <button class="ghost" @click="queryRateLimit">查询</button>
           </div>
+
+          <div class="tool-card data-screen-card">
+            <h3>数据大屏</h3>
+            <p class="muted">查看系统运营数据和统计分析</p>
+            <button class="primary" @click="toggleDataScreen">{{ showDataScreen ? '关闭数据大屏' : '打开数据大屏' }}</button>
+          </div>
+        </div>
+
+        <!-- 数据大屏展示区域 -->
+        <div v-if="showDataScreen" class="data-screen-panel">
+          <div class="data-screen-header">
+            <h2>数据大屏</h2>
+            <div class="screen-controls">
+              <button class="ghost small" @click="refreshDataScreen">刷新数据</button>
+              <button class="ghost small" @click="toggleAutoRefresh">{{ autoRefresh ? '停止自动刷新' : '开启自动刷新' }}</button>
+            </div>
+          </div>
+
+          <div v-if="dataScreenLoading" class="loading-state">
+            <p>正在加载数据...</p>
+          </div>
+
+          <div v-else class="data-screen-grid">
+            <!-- 总体概览 -->
+            <div class="data-card overview-card">
+              <h3>总体概览</h3>
+              <div v-if="dataScreen.总体概览" class="stats-grid">
+                <div class="stat-item" v-for="(value, key) in dataScreen.总体概览" :key="key">
+                  <span class="stat-label">{{ key }}</span>
+                  <span class="stat-value">{{ formatValue(value) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 营收分析 -->
+            <div class="data-card revenue-card large-card">
+              <h3>💰 营收分析</h3>
+              <div v-if="dataScreen.营收分析" class="revenue-stats">
+                <div class="revenue-metrics">
+                  <div class="metric-item" v-for="(value, key) in dataScreen.营收分析" :key="key" v-show="key !== '近7天营收趋势'">
+                    <span class="metric-label">{{ key }}</span>
+                    <span class="metric-value">¥{{ formatMoney(value) }}</span>
+                  </div>
+                </div>
+                <div class="chart-container">
+                  <h4>📈 营收趋势图</h4>
+                  <canvas ref="revenueChartCanvas" class="chart-canvas"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- 演出统计 -->
+            <div class="data-card shows-card large-card">
+              <h3>🎭 演出统计</h3>
+              <div v-if="dataScreen.演出统计">
+                <div v-if="dataScreen.演出统计['热门演出TOP5']" class="top-shows">
+                  <div class="chart-container">
+                    <h4>🏆 热门演出TOP5 - 营收排行</h4>
+                    <canvas ref="showRankingChartCanvas" class="chart-canvas"></canvas>
+                  </div>
+                  <div class="shows-details">
+                    <div v-for="(show, index) in dataScreen.演出统计['热门演出TOP5']" :key="show.演出ID" class="show-item">
+                      <span class="rank rank-{{ index + 1 }}">{{ index + 1 }}</span>
+                      <div class="show-info">
+                        <span class="show-title">{{ show.演出标题 }}</span>
+                        <span class="show-artist">{{ show.艺人 }}</span>
+                        <div class="show-metrics">
+                          <span class="show-revenue">¥{{ formatMoney(show.营收) }}</span>
+                          <span class="show-tickets">{{ show.已售票数 }}张</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 订单统计 -->
+            <div class="data-card orders-card large-card">
+              <h3>📋 订单统计</h3>
+              <div v-if="dataScreen.订单统计" class="order-stats">
+                <div class="order-today">
+                  <div class="stat-row">
+                    <span>今日订单数</span>
+                    <span class="highlight-number">{{ dataScreen.订单统计.今日订单数 }}</span>
+                  </div>
+                  <div class="stat-row">
+                    <span>今日支付订单数</span>
+                    <span class="highlight-number">{{ dataScreen.订单统计.今日支付订单数 }}</span>
+                  </div>
+                </div>
+                
+                <div class="charts-row">
+                  <div class="chart-section">
+                    <h4>📊 订单状态分布</h4>
+                    <canvas ref="orderStatusChartCanvas" class="chart-canvas"></canvas>
+                  </div>
+                  <div class="chart-section">
+                    <h4>📈 24小时订单趋势</h4>
+                    <canvas ref="hourlyOrderChartCanvas" class="chart-canvas"></canvas>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 限流统计 -->
+            <div class="data-card ratelimit-card">
+              <h3>限流统计</h3>
+              <div v-if="dataScreen.限流统计" class="ratelimit-stats">
+                <div v-if="dataScreen.限流统计.限流统计" class="ratelimit-info">
+                  <div class="info-item" v-for="(value, key) in dataScreen.限流统计.限流统计" :key="key" v-show="key !== '近期限流记录'">
+                    <span>{{ key }}</span>
+                    <span>{{ value }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 访问统计 -->
+            <div class="data-card visits-card large-card">
+              <h3>👥 访问统计</h3>
+              <div v-if="dataScreen.访问统计 && dataScreen.访问统计.网站访问统计" class="visit-stats">
+                <div class="visit-overview">
+                  <div class="visit-item">
+                    <span>今日访问量</span>
+                    <span class="highlight-number">{{ dataScreen.访问统计.网站访问统计.今日访问量 }}</span>
+                  </div>
+                  <div class="visit-item">
+                    <span>今日独立访客</span>
+                    <span class="highlight-number">{{ dataScreen.访问统计.网站访问统计.今日独立访客 }}</span>
+                  </div>
+                  <div class="visit-item">
+                    <span>实时在线用户</span>
+                    <span class="highlight-number online-users">{{ dataScreen.访问统计.网站访问统计.实时在线用户 }}</span>
+                  </div>
+                </div>
+                <div class="chart-container">
+                  <h4>📊 近7天访问趋势</h4>
+                  <canvas ref="visitTrendChartCanvas" class="chart-canvas"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- 实时数据 -->
+            <div class="data-card realtime-card">
+              <h3>实时数据</h3>
+              <div v-if="dataScreen.实时数据" class="realtime-stats">
+                <div class="update-time">
+                  <small>更新时间: {{ dataScreen.实时数据.数据更新时间 }}</small>
+                </div>
+                <div v-if="dataScreen.实时数据.实时指标" class="realtime-metrics">
+                  <div v-for="(value, key) in dataScreen.实时数据.实时指标" :key="key" class="metric-item">
+                    <span>{{ key }}</span>
+                    <span>{{ formatValue(value) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -245,20 +416,41 @@
 
     <div v-if="ticketModal.visible" class="modal-mask" @click.self="closeTicketModal">
       <section class="ticket-modal">
-        <button class="close-button" @click="closeTicketModal">关闭</button>
+        <button class="close-button" @click="closeTicketModal" aria-label="关闭">×</button>
         <div class="ticket-image large" :style="posterStyle(ticketModal.show?.image)"></div>
-        <div>
-          <p class="eyebrow">Tickets Ready</p>
-          <h2>{{ ticketModal.show?.title || '电子票已生成' }}</h2>
-          <p>{{ ticketModal.show?.artist }}</p>
-          <p class="muted">{{ ticketModal.venue?.name }} {{ formatDate(ticketModal.show?.startTime) }}</p>
+        <div class="ticket-modal-body">
+          <p class="eyebrow">购票成功</p>
+          <h2>{{ ticketModal.show?.title || '演出门票已出票' }}</h2>
+          <p class="artist">{{ ticketModal.show?.artist }}</p>
+          <p class="muted">{{ ticketModal.venue?.name }} · {{ formatDate(ticketModal.show?.startTime) }}</p>
           <div class="modal-ticket-list">
-            <div v-for="ticket in ticketModal.tickets" :key="ticket.id" class="modal-ticket-item">
-              <span>{{ ticketName(ticket.ticketTypeId) }}</span>
-              <strong>{{ ticket.verifyCode }}</strong>
+            <div v-for="(ticket, idx) in ticketModal.tickets" :key="ticket.id" class="modal-ticket-item">
+              <span class="modal-ticket-name">{{ ticketName(ticket.ticketTypeId) }}</span>
+              <span class="modal-ticket-badge">第 {{ idx + 1 }} 张 · 出票成功</span>
             </div>
           </div>
-          <button class="primary" @click="goTicketsFromModal">查看我的票夹</button>
+          <button class="primary full-width" @click="goTicketsFromModal">前往我的票夹查看二维码</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- 二维码模态框 -->
+    <div v-if="qrModal.visible" class="modal-mask" @click.self="closeQRModal">
+      <section class="qr-modal">
+        <button class="close-button" @click="closeQRModal" aria-label="关闭">×</button>
+        <div class="qr-content">
+          <div class="qr-header">
+            <p class="eyebrow">入场凭证</p>
+            <h2>{{ showTitle(qrModal.ticket?.showId) }}</h2>
+            <p class="qr-ticket-type">{{ ticketName(qrModal.ticket?.ticketTypeId) }}</p>
+            <p class="muted qr-meta">{{ formatDate(showCache[qrModal.ticket?.showId]?.startTime) }}</p>
+            <p class="muted qr-meta">{{ venueText(qrModal.ticket?.showId) }}</p>
+          </div>
+          
+          <div class="qr-code-container">
+            <canvas ref="qrCanvas" class="qr-code"></canvas>
+            <p class="qr-tip">入场时请向现场工作人员出示此二维码</p>
+          </div>
         </div>
       </section>
     </div>
@@ -268,8 +460,36 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, nextTick } from 'vue'
+import QRCode from 'qrcode'
 import { api, getToken, setToken } from './api'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  Filler
+} from 'chart.js'
+
+// 注册Chart.js组件
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  Filler
+)
 
 const page = ref('home')
 const loading = ref(false)
@@ -286,6 +506,7 @@ const avatarFile = ref(null)
 const showImageFile = ref(null)
 const uploadedShowUrl = ref('')
 const ticketInfo = ref('')
+const qrCanvas = ref(null)
 
 const showCache = reactive({})
 const venueCache = reactive({})
@@ -309,8 +530,31 @@ const admin = reactive({
   showId: '1',
   ip: '127.0.0.1'
 })
+
+// 数据大屏相关状态
+const showDataScreen = ref(false)
+const dataScreenLoading = ref(false)
+const autoRefresh = ref(false)
+const refreshTimer = ref(null)
+const dataScreen = reactive({})
+
+// 图表相关refs
+const revenueChartCanvas = ref(null)
+const orderStatusChartCanvas = ref(null)
+const showRankingChartCanvas = ref(null)
+const visitTrendChartCanvas = ref(null)
+const hourlyOrderChartCanvas = ref(null)
+
+// 图表实例
+let revenueChart = null
+let orderStatusChart = null
+let showRankingChart = null
+let visitTrendChart = null
+let hourlyOrderChart = null
+
 const toast = reactive({ text: '', type: 'success' })
 const ticketModal = reactive({ visible: false, tickets: [], show: null, venue: null })
+const qrModal = reactive({ visible: false, ticket: null })
 
 const displayName = computed(() => user.value?.nickName || '我')
 
@@ -474,6 +718,43 @@ async function goTicketsFromModal() {
   go('tickets')
 }
 
+async function showQRCode(ticket) {
+  if (ticket.verifyStatus === 1) {
+    notify('此票已使用', 'error')
+    return
+  }
+  
+  qrModal.ticket = ticket
+  qrModal.visible = true
+  
+  // 等待DOM更新后生成二维码
+  await nextTick()
+  generateQRCode(ticket.verifyCode)
+}
+
+function closeQRModal() {
+  qrModal.visible = false
+  qrModal.ticket = null
+}
+
+async function generateQRCode(ticketCode) {
+  if (!qrCanvas.value) return
+  
+  try {
+    await QRCode.toCanvas(qrCanvas.value, ticketCode, {
+      width: 190,
+      margin: 1,
+      color: {
+        dark: '#1e1c24',
+        light: '#ffffff'
+      }
+    })
+  } catch (error) {
+    console.error('二维码生成失败:', error)
+    notify('二维码生成失败', 'error')
+  }
+}
+
 async function loadMyTickets() {
   if (!requireLogin()) return
   const data = await call(() => api.myTickets())
@@ -599,6 +880,502 @@ function normalizeImage(image) {
   if (!image) return ''
   if (/^https?:\/\//.test(image) || image.startsWith('/')) return image
   return `/uploads/${image}`
+}
+
+// ========== 数据大屏相关函数 ==========
+
+async function toggleDataScreen() {
+  showDataScreen.value = !showDataScreen.value
+  if (showDataScreen.value) {
+    await loadDataScreenData()
+  } else {
+    // 关闭数据大屏时停止自动刷新和销毁图表
+    if (autoRefresh.value) {
+      toggleAutoRefresh()
+    }
+    destroyExistingCharts()
+  }
+}
+
+async function loadDataScreenData() {
+  dataScreenLoading.value = true
+  try {
+    const data = await call(() => api.getDataScreenAll())
+    if (data) {
+      Object.assign(dataScreen, data)
+      notify('数据加载成功')
+      
+      // 等待DOM更新后创建图表
+      await nextTick()
+      createCharts()
+    }
+  } catch (error) {
+    notify('数据加载失败：' + error.message, 'error')
+  } finally {
+    dataScreenLoading.value = false
+  }
+}
+
+async function refreshDataScreen() {
+  if (!showDataScreen.value) return
+  await loadDataScreenData()
+}
+
+function toggleAutoRefresh() {
+  autoRefresh.value = !autoRefresh.value
+  
+  if (autoRefresh.value) {
+    // 开启自动刷新，每30秒刷新一次
+    refreshTimer.value = setInterval(() => {
+      refreshDataScreen()
+    }, 30000)
+    notify('已开启自动刷新（30秒一次）')
+  } else {
+    // 关闭自动刷新
+    if (refreshTimer.value) {
+      clearInterval(refreshTimer.value)
+      refreshTimer.value = null
+    }
+    notify('已停止自动刷新')
+  }
+}
+
+// 数据格式化工具函数
+function formatValue(value) {
+  if (typeof value === 'number') {
+    if (value > 10000) {
+      return (value / 10000).toFixed(1) + '万'
+    }
+    return value.toLocaleString()
+  }
+  return value || '-'
+}
+
+function formatMoney(amount) {
+  if (!amount || isNaN(amount)) return '0.00'
+  return Number(amount).toLocaleString('zh-CN', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  })
+}
+
+function getBarHeight(value, dataArray) {
+  if (!dataArray || dataArray.length === 0) return 0
+  const maxValue = Math.max(...dataArray.map(item => Number(item.营收 || 0)))
+  if (maxValue === 0) return 0
+  return (Number(value || 0) / maxValue) * 100
+}
+
+// ========== 图表创建和管理函数 ==========
+
+function destroyExistingCharts() {
+  // 销毁现有图表实例
+  if (revenueChart) {
+    revenueChart.destroy()
+    revenueChart = null
+  }
+  if (orderStatusChart) {
+    orderStatusChart.destroy()
+    orderStatusChart = null
+  }
+  if (showRankingChart) {
+    showRankingChart.destroy()
+    showRankingChart = null
+  }
+  if (visitTrendChart) {
+    visitTrendChart.destroy()
+    visitTrendChart = null
+  }
+  if (hourlyOrderChart) {
+    hourlyOrderChart.destroy()
+    hourlyOrderChart = null
+  }
+}
+
+function createCharts() {
+  // 先销毁现有图表
+  destroyExistingCharts()
+  
+  // 创建各个图表
+  createRevenueChart()
+  createOrderStatusChart()
+  createShowRankingChart()
+  createVisitTrendChart()
+  createHourlyOrderChart()
+}
+
+function createRevenueChart() {
+  if (!revenueChartCanvas.value || !dataScreen.营收分析?.['近7天营收趋势']) return
+  
+  const trendData = dataScreen.营收分析['近7天营收趋势']
+  const ctx = revenueChartCanvas.value.getContext('2d')
+  
+  revenueChart = new ChartJS(ctx, {
+    type: 'line',
+    data: {
+      labels: trendData.map(item => item.日期),
+      datasets: [{
+        label: '营收 (元)',
+        data: trendData.map(item => item.营收),
+        borderColor: '#10B981',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#10B981',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 6,
+        pointHoverRadius: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          borderColor: '#10B981',
+          borderWidth: 1,
+          callbacks: {
+            label: function(context) {
+              return '营收: ¥' + context.parsed.y.toLocaleString('zh-CN', { minimumFractionDigits: 2 })
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            display: false
+          },
+          ticks: {
+            color: 'rgba(255, 255, 255, 0.8)',
+            font: {
+              size: 12,
+              weight: '600'
+            }
+          }
+        },
+        y: {
+          grid: {
+            color: 'rgba(255, 255, 255, 0.1)'
+          },
+          ticks: {
+            color: 'rgba(255, 255, 255, 0.8)',
+            font: {
+              size: 12,
+              weight: '600'
+            },
+            callback: function(value) {
+              return '¥' + (value / 1000).toFixed(0) + 'K'
+            }
+          }
+        }
+      },
+      animation: {
+        duration: 2000,
+        easing: 'easeInOutQuart'
+      }
+    }
+  })
+}
+
+function createOrderStatusChart() {
+  if (!orderStatusChartCanvas.value || !dataScreen.订单统计?.订单状态分布) return
+  
+  const statusData = dataScreen.订单统计.订单状态分布
+  const labels = Object.keys(statusData)
+  const data = Object.values(statusData)
+  const ctx = orderStatusChartCanvas.value.getContext('2d')
+  
+  const colors = ['#F59E0B', '#10B981', '#EF4444', '#8B5CF6']
+  
+  orderStatusChart = new ChartJS(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        backgroundColor: colors,
+        borderColor: '#ffffff',
+        borderWidth: 3,
+        hoverBorderWidth: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: 'rgba(255, 255, 255, 0.9)',
+            font: {
+              size: 12,
+              weight: '600'
+            },
+            padding: 15,
+            usePointStyle: true,
+            pointStyle: 'circle'
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          callbacks: {
+            label: function(context) {
+              const total = context.dataset.data.reduce((a, b) => a + b, 0)
+              const percent = ((context.parsed / total) * 100).toFixed(1)
+              return context.label + ': ' + context.parsed + ' (' + percent + '%)'
+            }
+          }
+        }
+      },
+      cutout: '60%',
+      animation: {
+        animateRotate: true,
+        duration: 2000
+      }
+    }
+  })
+}
+
+function createShowRankingChart() {
+  if (!showRankingChartCanvas.value || !dataScreen.演出统计?.['热门演出TOP5']) return
+  
+  const showData = dataScreen.演出统计['热门演出TOP5']
+  const ctx = showRankingChartCanvas.value.getContext('2d')
+  
+  showRankingChart = new ChartJS(ctx, {
+    type: 'bar',
+    data: {
+      labels: showData.map(show => show.演出标题.length > 8 ? show.演出标题.substring(0, 8) + '...' : show.演出标题),
+      datasets: [{
+        label: '营收 (元)',
+        data: showData.map(show => show.营收),
+        backgroundColor: [
+          'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          'rgba(102, 126, 234, 0.8)',
+          'rgba(118, 75, 162, 0.8)',
+          'rgba(102, 126, 234, 0.6)',
+          'rgba(118, 75, 162, 0.6)'
+        ],
+        borderColor: '#667eea',
+        borderWidth: 2,
+        borderRadius: 8,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          callbacks: {
+            label: function(context) {
+              return '营收: ¥' + context.parsed.x.toLocaleString('zh-CN', { minimumFractionDigits: 2 })
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            color: 'rgba(255, 255, 255, 0.1)'
+          },
+          ticks: {
+            color: 'rgba(255, 255, 255, 0.8)',
+            font: {
+              size: 11,
+              weight: '600'
+            },
+            callback: function(value) {
+              return '¥' + (value / 1000).toFixed(0) + 'K'
+            }
+          }
+        },
+        y: {
+          grid: {
+            display: false
+          },
+          ticks: {
+            color: 'rgba(255, 255, 255, 0.9)',
+            font: {
+              size: 11,
+              weight: '600'
+            }
+          }
+        }
+      },
+      animation: {
+        duration: 2000,
+        easing: 'easeInOutQuart'
+      }
+    }
+  })
+}
+
+function createVisitTrendChart() {
+  if (!visitTrendChartCanvas.value || !dataScreen.访问统计?.网站访问统计?.['近7天访问趋势']) return
+  
+  const trendData = dataScreen.访问统计.网站访问统计['近7天访问趋势']
+  const ctx = visitTrendChartCanvas.value.getContext('2d')
+  
+  visitTrendChart = new ChartJS(ctx, {
+    type: 'line',
+    data: {
+      labels: trendData.map(item => item.日期),
+      datasets: [{
+        label: '访问量',
+        data: trendData.map(item => item.访问量),
+        borderColor: '#8B5CF6',
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#8B5CF6',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 5,
+        pointHoverRadius: 7
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          borderColor: '#8B5CF6',
+          borderWidth: 1
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            color: 'rgba(139, 92, 246, 0.1)'
+          },
+          ticks: {
+            color: '#4B5563',
+            font: {
+              size: 12,
+              weight: '600'
+            }
+          }
+        },
+        y: {
+          grid: {
+            color: 'rgba(139, 92, 246, 0.1)'
+          },
+          ticks: {
+            color: '#4B5563',
+            font: {
+              size: 12,
+              weight: '600'
+            }
+          }
+        }
+      },
+      animation: {
+        duration: 2000,
+        easing: 'easeInOutQuart'
+      }
+    }
+  })
+}
+
+function createHourlyOrderChart() {
+  if (!hourlyOrderChartCanvas.value || !dataScreen.订单统计?.['24小时订单趋势']) return
+  
+  const hourlyData = dataScreen.订单统计['24小时订单趋势']
+  const ctx = hourlyOrderChartCanvas.value.getContext('2d')
+  
+  hourlyOrderChart = new ChartJS(ctx, {
+    type: 'line',
+    data: {
+      labels: hourlyData.map(item => item.时间),
+      datasets: [{
+        label: '订单数',
+        data: hourlyData.map(item => item.订单数),
+        borderColor: '#F59E0B',
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.3,
+        pointBackgroundColor: '#F59E0B',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          borderColor: '#F59E0B',
+          borderWidth: 1
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            display: false
+          },
+          ticks: {
+            color: 'rgba(255, 255, 255, 0.7)',
+            font: {
+              size: 10,
+              weight: '600'
+            },
+            maxTicksLimit: 8
+          }
+        },
+        y: {
+          grid: {
+            color: 'rgba(255, 255, 255, 0.1)'
+          },
+          ticks: {
+            color: 'rgba(255, 255, 255, 0.8)',
+            font: {
+              size: 11,
+              weight: '600'
+            }
+          }
+        }
+      },
+      animation: {
+        duration: 1500,
+        easing: 'easeInOutQuart'
+      }
+    }
+  })
 }
 
 onMounted(async () => {
