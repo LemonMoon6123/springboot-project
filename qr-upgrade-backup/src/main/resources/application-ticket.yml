@@ -1,0 +1,74 @@
+# LiveHouse票务系统配置
+ticket:
+  # 票务安全配置
+  security:
+    # 签名密钥 - 生产环境请务必修改
+    secret-key: ${TICKET_SECRET_KEY:livehouse-ticket-secret-2024}
+    # 二维码有效期（分钟）
+    qr-validity-minutes: ${TICKET_QR_VALIDITY:30}
+    # 是否启用时间戳验证
+    enable-timestamp-validation: ${TICKET_ENABLE_TIMESTAMP:true}
+    # 是否启用设备白名单
+    enable-device-whitelist: ${TICKET_ENABLE_DEVICE_WHITELIST:false}
+    
+  # 二维码生成配置
+  qrcode:
+    # 默认宽度
+    width: ${TICKET_QR_WIDTH:300}
+    # 默认高度
+    height: ${TICKET_QR_HEIGHT:300}
+    # 错误纠正等级 L M Q H
+    error-correction-level: ${TICKET_QR_ERROR_CORRECTION:M}
+    # 边距
+    margin: ${TICKET_QR_MARGIN:1}
+    # 字符编码
+    charset: ${TICKET_QR_CHARSET:UTF-8}
+    
+  # 验票配置
+  verification:
+    # 是否允许批量验票
+    enable-batch-verify: ${TICKET_ENABLE_BATCH_VERIFY:true}
+    # 批量验票最大数量
+    max-batch-size: ${TICKET_MAX_BATCH_SIZE:50}
+    # 验票超时时间（秒）
+    timeout-seconds: ${TICKET_VERIFY_TIMEOUT:30}
+    # 是否记录验票日志
+    enable-audit-log: ${TICKET_ENABLE_AUDIT_LOG:true}
+    
+  # 第三方设备集成配置
+  third-party:
+    # API密钥配置（多个密钥用逗号分隔）
+    api-keys: ${TICKET_API_KEYS:demo-key-1,demo-key-2,demo-key-3}
+    # 设备白名单（设备ID列表）
+    device-whitelist: ${TICKET_DEVICE_WHITELIST:}
+    # 请求频率限制（每分钟最大请求数）
+    rate-limit-per-minute: ${TICKET_RATE_LIMIT:60}
+    
+  # Redis配置（票务相关）
+  redis:
+    # BitMap Key前缀
+    bitmap-prefix: ${TICKET_REDIS_BITMAP_PREFIX:ticket:verify}
+    # 验票记录过期时间（天）
+    verify-record-expire-days: ${TICKET_VERIFY_RECORD_EXPIRE:90}
+    # 是否启用Redis集群模式
+    enable-cluster: ${TICKET_REDIS_CLUSTER:false}
+    
+  # 移动端配置
+  mobile:
+    # 是否启用跨域支持
+    enable-cors: ${TICKET_MOBILE_CORS:true}
+    # 允许的域名列表
+    allowed-origins: ${TICKET_MOBILE_ORIGINS:*}
+    # 客户端版本检查
+    enable-version-check: ${TICKET_MOBILE_VERSION_CHECK:false}
+    # 最低支持版本
+    min-version: ${TICKET_MOBILE_MIN_VERSION:1.0.0}
+    
+  # 文件存储配置
+  storage:
+    # 二维码图片存储路径
+    qr-image-path: ${TICKET_QR_IMAGE_PATH:./uploads/qrcode/}
+    # 日志文件存储路径
+    log-file-path: ${TICKET_LOG_PATH:./logs/ticket/}
+    # 文件清理策略（天）
+    file-cleanup-days: ${TICKET_FILE_CLEANUP_DAYS:30}
