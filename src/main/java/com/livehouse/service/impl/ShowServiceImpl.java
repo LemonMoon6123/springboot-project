@@ -106,14 +106,18 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
         // 1. 先更新数据库
         updateById(show);
 
-        // 2. 重新设置带逻辑过期的缓存
-        cacheClient.setWithLogicExpireTime(
-                CACHE_SHOW_KEY + id,
-                show,
-                CACHE_SHOW_TTL,
-                TimeUnit.MINUTES
-        );
-        
+        // 2. 重新查询完整演出并设置带逻辑过期的缓存
+        // （入参可能只带了部分字段，直接缓存入参会把未传字段序列化成null，造成缓存污染）
+        Show latestShow = getById(id);
+        if (latestShow != null) {
+            cacheClient.setWithLogicExpireTime(
+                    CACHE_SHOW_KEY + id,
+                    latestShow,
+                    CACHE_SHOW_TTL,
+                    TimeUnit.MINUTES
+            );
+        }
+
         return Result.ok();
     }
 
@@ -135,7 +139,7 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
                 // 过滤指定城市的演出
                 List<Show> filteredShows = page.getRecords().stream()
                         .filter(show -> {
-                            Venue venue = venueService.getById(show.getVenueId());
+                            Venue venue = venueService.queryVenueById(show.getVenueId());
                             return venue != null && city.equals(venue.getCity());
                         })
                         .collect(Collectors.toList());
@@ -208,8 +212,8 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
             dto.setDescription(show.getDescription());
             dto.setImage(show.getImage());
             
-            // 查询场馆信息
-            Venue venue = venueService.getById(show.getVenueId());
+            // 查询场馆信息（走布隆+读写锁缓存）
+            Venue venue = venueService.queryVenueById(show.getVenueId());
             dto.setVenue(venue);
             
             // 设置距离

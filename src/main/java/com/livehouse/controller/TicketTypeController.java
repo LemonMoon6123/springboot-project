@@ -21,9 +21,6 @@ public class TicketTypeController {
 
     @GetMapping("/of/show/{showId}")
     public Result queryTicketTypesByShowId(@PathVariable("showId") Long showId) {
-        return Result.ok(ticketTypeService.lambdaQuery()
-                .eq(com.livehouse.entity.TicketType::getShowId, showId)
-                .orderByAsc(com.livehouse.entity.TicketType::getPrice)
-                .list());
+        return Result.ok(ticketTypeService.listByShowId(showId));
     }
 }

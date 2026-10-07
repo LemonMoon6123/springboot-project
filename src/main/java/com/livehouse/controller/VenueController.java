@@ -24,7 +24,7 @@ public class VenueController {
      */
     @GetMapping("/{id}")
     public Result queryVenueById(@PathVariable("id") Long id) {
-        Venue venue = venueService.getById(id);
+        Venue venue = venueService.queryVenueById(id);
         if (venue == null) {
             return Result.fail("场馆不存在");
         }
@@ -48,7 +48,7 @@ public class VenueController {
      */
     @PostMapping
     public Result saveVenue(@RequestBody Venue venue) {
-        venueService.save(venue);
+        venueService.saveVenue(venue);
         return Result.ok(venue.getId());
     }
 
@@ -62,7 +62,7 @@ public class VenueController {
         if (venue.getId() == null) {
             return Result.fail("场馆不存在");
         }
-        venueService.updateById(venue);
+        venueService.updateVenue(venue);
         return Result.ok();
     }
 }
