@@ -1,0 +1,69 @@
+spring:
+  application:
+    name: ai-mall
+
+  ai:
+    # 仅自建 ChatClient / 本地 Embedding；关闭其余 OpenAI 自动装配
+    model:
+      chat: none
+      embedding: none
+      image: none
+      moderation: none
+      audio:
+        speech: none
+        transcription: none
+    openai:
+      api-key: ${DEEPSEEK_API_KEY:sk-placeholder}
+      base-url: https://api.deepseek.com
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/ai_agent_mall?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&characterSetResults=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      mode: never
+      encoding: UTF-8
+
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      # 用 MySQL 自增，插完把生成的 ID 填回实体 MyBatis-Plus 底层用 JDBC 的`getGeneratedKeys` 把数据库分配的自增 ID 回填 到实体对象
+      id-type: auto
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+
+logging:
+  level:
+    com.scaffold: debug
+
+app:
+  jwt:
+    secret: change-this-secret-key-to-a-long-random-string-in-production
+    expiration-ms: 86400000
+  upload:
+    path: uploads
+  ai:
+    enabled: true
+    api-url: https://api.deepseek.com/chat/completions
+    api-key: ${DEEPSEEK_API_KEY:}
+    model: deepseek-flash
+    vision-model: deepseek-v4-flash-vision-exp
