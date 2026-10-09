@@ -20,6 +20,7 @@ public class MessageProducerServiceImpl implements IMessageProducerService {
     @Autowired
     private RabbitTemplate rabbitTemplate;
 
+    // 发送创建订单消息，向绑定了直连交换机和路由键的秒杀下单队列发送消息，该队列还绑定了死信交换机和路由键
     @Override
     public void sendSeckillOrderMessage(SeckillOrderMessage message) {
         try {

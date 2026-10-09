@@ -23,9 +23,21 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
  * 秒杀订单消费者
  *
  * 库存恢复策略（靠路径互斥保证「只处理一次」，不为回补动作单独做幂等）：
- * 1. requestId 查库：防 broker 重复投递导致重复建单（这是消息级去重，保留）；
+ * 1. requestId 查库：防 broker 重复投递导致重复建单；
+ * 解释：防 broker 的 at-least-once 投递语义 带来的重复投递——broker 为了不丢消息，宁可多送几次，幂等就在消费者端把重复的挡掉。
+ *
+ * RabbitMQ 的投递语义是 at-least-once（至少一次） ：只要 broker 没收到对这条消息的 ack/nack，它就认为消费者没成功处理，必须重新投递，宁可重复不可丢失。
+ *
+ * Spring AMQP 在消费者抛异常时自动发 nack，requeue 值取自`defaultRequeueRejected` 配置：
+ *
+ * - 没配 /`true` →`basicNack(requeue=true)` → 回原队列
+ * - `false` →`basicNack(requeue=false)` → 走死信
+ * 所以 broker 本身没有"丢弃"这个选项，它只是个执行者——requeue=true 它放回队列，requeue=false 它查队列有没有配 DLX，配了就转死信，没配才真正丢弃。
+ *
+ * 项目配了 DLX，所以只要把`default-requeue-rejected: false` 加上，重试耗尽的消息就会走死信 →`SeckillOrderDlxConsumer` 收到做库存兜底。
+ *
  * 2. DB 库存不足：校准 Redis + 回补限购，回滚事务后确认消息，不重试、不进死信；
- * 3. 瞬时异常：不回补，抛出重试；耗尽后由死信消费者校准（与路径 2 互斥）。
+ * 3. 瞬时异常：不回补，抛出重试；耗尽后由死信消费者校准。
  */
 @Slf4j
 @Component
@@ -87,9 +99,9 @@ public class SeckillOrderConsumer {
             order.setOrderStatus(1);
             order.setRequestId(requestId);
 
-            ticketOrderService.save(order);
+            ticketOrderService.save(order); // 订单入库
 
-            boolean success = ticketTypeService.update()
+            boolean success = ticketTypeService.update() // 扣减库存
                     .setSql("left_stock = left_stock - " + message.getQuantity())
                     .eq("id", message.getTicketTypeId())
                     .gt("left_stock", message.getQuantity() - 1)
@@ -99,6 +111,7 @@ public class SeckillOrderConsumer {
                 throw new DbStockInsufficientException("数据库库存不足，订单创建失败");
             }
 
+            // 成功创建订单并扣减库存，同时把这个消息放到延时队列里，这个队列里的信息将在15分钟后被broker投递到死信队列中，用于超时订单处理。
             OrderTimeoutMessage timeoutMessage = new OrderTimeoutMessage(
                     orderId,
                     message.getUserId(),
@@ -115,7 +128,7 @@ public class SeckillOrderConsumer {
             reconcileRedisWithDbAndReleaseUserQuota(message);
             clearUserPendingStatus(message);
 
-            // 标记事务回滚，避免 save(order) 被提交；同时不向外抛异常，避免框架重试把虚高再补回去
+            // 标记事务回滚，避免 save(order) 被提交；同时不向外抛异常，避免框架重试。
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
 
         // 秒杀消息消费 + 自动重试 路线
@@ -128,7 +141,7 @@ public class SeckillOrderConsumer {
     }
 
     /**
-     * 以 MySQL left_stock 覆盖 Redis 库存，并回补本次 Lua 占用的用户限购计数。
+     * 以 MySQL left_stock 覆盖 Redis 库存，同步mysql与 redis的库存数，不能直接回滚redis的库存。同时回补本次 Lua 占用的用户限购计数。
      */
     private void reconcileRedisWithDbAndReleaseUserQuota(SeckillOrderMessage message) {
         TicketType ticketType = ticketTypeService.getById(message.getTicketTypeId());

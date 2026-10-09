@@ -87,6 +87,8 @@ public class OrderTimeoutConsumer {
                     message.getUserId(),
                     message.getQuantity()
             );
+
+            // 如果redis库存回滚失败了，那么就直接同步mysql的库存数据
             if (result == null || result != 0L) {
                 log.error("Redis库存归还失败，订单ID：{}，结果码：{}", message.getOrderId(), result);
                 // MySQL 已还：将 Redis 校准到当前 DB，避免只还了一边
@@ -94,6 +96,7 @@ public class OrderTimeoutConsumer {
                 seckillScriptExecutor.syncRedisStockFromDb(message.getTicketTypeId(), dbLeft);
             }
 
+            // 清除用户对该票的待支付状态，一直没支付订单都超时了就清除该状态。
             String userOrderStatusKey = "user:order:status:" +
                     message.getUserId() + ":" + message.getTicketTypeId();
             stringRedisTemplate.delete(userOrderStatusKey);

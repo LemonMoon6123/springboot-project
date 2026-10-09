@@ -107,7 +107,7 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
                 return Result.fail("请勿重复点击！");
             }
 
-            // 2.3 再次检查Redis状态，更稳妥一些。
+            // 2.3 再次检查Redis状态，更稳妥一些。因为当该用户线程成功完成创建订单后，释放锁的一瞬间可能仍有大量该用户进程再申请锁（该用户期间一直在不断点击）
             orderStatus = stringRedisTemplate.opsForValue().get(userOrderStatusKey);
             if ("PENDING".equals(orderStatus)) {
                 return Result.fail("您有未支付的订单，请先完成支付！");
@@ -149,6 +149,7 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
                 // 供消费者端识别并拦截"同一条消息被重复处理"的情况（防止重复建单/重复归还库存）
                 orderMessage.setRequestId(UUID.randomUUID().toString());
 
+                // 调用负责创建订单的生产者
                 messageProducerService.sendSeckillOrderMessage(orderMessage);
                 
                 log.info("秒杀成功，已发送订单消息，用户ID：{}，票种ID：{}", userId, ticketTypeId);
@@ -156,7 +157,7 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
 
             } catch (Exception e) {
                 log.error("发送订单消息失败，恢复Redis库存，用户ID：{}，票种ID：{}", userId, ticketTypeId, e);
-                // 消息发送失败，需要恢复Redis库存,清除用户下单状态。
+                // 消息发送失败，需要恢复Redis库存,清除用户下单状态，让用户可以进行后续重试。
                 restoreStock(ticketTypeId, userId, quantity);
                 stringRedisTemplate.delete(userOrderStatusKey);
                 return Result.fail("系统繁忙，请稍后再试！");

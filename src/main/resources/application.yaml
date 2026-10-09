@@ -20,20 +20,31 @@ spring:
         time-between-eviction-runs: 10s
   rabbitmq:
     host: localhost
+    # 消息通信端口 安装完rabbitMQ后有个自带的前端可视化管理UI页面，端口15672，浏览器访问
     port: 5672
     username: guest
     password: guest
     virtual-host: /
+    # 生产者配置
     publisher-confirms: true
     publisher-returns: true
+    # 消费者配置
     listener:
       simple:
+        # Spring AMQP 框架自动ack/nack ->  消费者方法正常执行结束→自动 ack，方法抛异常→自动 nack
+        # 方法正常返回 → 框架 basicAck(deliveryTag, false) → broker 删消息
+        # 方法抛异常   → 框架 basicNack(deliveryTag, defaultRequeueRejected) → broker 按 requeue 决定去向
         acknowledge-mode: auto
+        # 初始消费者线程数量
         concurrency: 5
+        # 动态扩容的最大数量
         max-concurrency: 10
+        # 重试机制及次数
         retry:
           enabled: true
           max-attempts: 3
+        # 设置broker（RabbitMQ）默认消息投递规则： false代表消费失败(nack)不重新投递消息入队
+        default-requeue-rejected: false
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
 mybatis-plus:
