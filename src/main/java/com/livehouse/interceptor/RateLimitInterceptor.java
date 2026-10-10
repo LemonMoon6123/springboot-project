@@ -55,7 +55,20 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     }
 
     /**
-     * 获取客户端IP地址
+     * 获取客户端IP地址，这里暂时罗列一些代理服务器的客户端IP存放请求头：
+     * 比如 Nginx、HAProxy、Apache、SLB、Cloudflare 这些，它们在转发请求时，会按自己的约定往请求头里塞客户端 IP。
+     *
+     * 不是统一规定，而是“事实标准 + 厂商自定义 + 容器映射”混在一起。
+     *
+     * X-Forwarded-For：事实标准，大家都爱用。
+     *
+     * X-Real-IP：Nginx 常用。
+     *
+     * Proxy-Client-IP：Apache mod_proxy 那套。
+     *
+     * WL-Proxy-Client-IP：WebLogic 插件留下的。
+     *
+     * HTTP_CLIENT_IP、HTTP_X_FORWARDED_FOR：其实是 Servlet 容器把 Client-IP、X-Forwarded-For 映射成了 HTTP_ 开头的名字，不是另一套独立约定。
      */
     private String getClientIp(HttpServletRequest request) {
         String ip = request.getHeader("X-Forwarded-For");

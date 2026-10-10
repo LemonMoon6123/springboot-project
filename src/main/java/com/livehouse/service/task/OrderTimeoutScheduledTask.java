@@ -15,9 +15,7 @@ import java.util.List;
 
 /**
  * 订单超时定时任务（兜底机制）
- *
- * 与 {@link com.livehouse.service.consumer.OrderTimeoutConsumer} 通过 CAS 更新 order_status
- * 互斥，避免死信消费者与定时任务对同一订单各归还一次库存。
+ * 这个兜底定时任务是防止超时订单消费者重试次数耗尽归还库存失败所造成的“零元购”现象，因为订单超时死信队列没有绑死信交换机和死信队列。
  */
 @Slf4j
 @Component
@@ -84,38 +82,45 @@ public class OrderTimeoutScheduledTask {
             return;
         }
 
-        // 先 MySQL，再 Redis，避免 Redis 虚高
-        boolean dbRestoreSuccess = ticketTypeService.update()
-                .setSql("left_stock = left_stock + " + order.getQuantity())
-                .eq("id", order.getTicketTypeId())
-                .update();
-
-        if (!dbRestoreSuccess) {
-            // 本类自调用导致 @Transactional 不生效，手动把订单状态改回待支付，等待下次扫描
-            ticketOrderService.update()
-                    .set("orderStatus", 1)
-                    .eq("id", order.getId())
-                    .eq("orderStatus", 3)
-                    .eq("payStatus", 0)
+        // 恢复逻辑与订单超时恢复逻辑基本一致，只是新增逻辑字段辅助
+        boolean dbRestored = false;
+        try {
+            boolean dbRestoreSuccess = ticketTypeService.update()
+                    .setSql("left_stock = left_stock + " + order.getQuantity())
+                    .eq("id", order.getTicketTypeId())
                     .update();
-            throw new IllegalStateException("数据库库存归还失败，订单ID：" + order.getId());
+
+            if (!dbRestoreSuccess) {
+                throw new IllegalStateException("数据库库存归还失败，订单ID：" + order.getId());
+            }
+            dbRestored = true;
+
+            Long result = seckillScriptExecutor.executeRestoreStock(
+                    order.getTicketTypeId(),
+                    order.getUserId(),
+                    order.getQuantity()
+            );
+
+            if (result == null || result != 0L) {
+                log.error("Redis库存归还失败，订单ID：{}，结果码：{}", order.getId(), result);
+                Integer dbLeft = ticketTypeService.getById(order.getTicketTypeId()).getLeftStock();
+                seckillScriptExecutor.syncRedisStockFromDb(order.getTicketTypeId(), dbLeft);
+            }
+
+            String userOrderStatusKey = "user:order:status:" +
+                    order.getUserId() + ":" + order.getTicketTypeId();
+            stringRedisTemplate.delete(userOrderStatusKey);
+        } catch (Exception e) {
+            if (!dbRestored) { // DB归还失败就回滚订单状态
+                ticketOrderService.update()
+                        .set("orderStatus", 1)
+                        .eq("id", order.getId())
+                        .eq("orderStatus", 3)
+                        .eq("payStatus", 0)
+                        .update();
+            }
+            throw e;
         }
-
-        Long result = seckillScriptExecutor.executeRestoreStock(
-                order.getTicketTypeId(),
-                order.getUserId(),
-                order.getQuantity()
-        );
-
-        if (result == null || result != 0L) {
-            log.error("Redis库存归还失败，订单ID：{}，结果码：{}", order.getId(), result);
-            Integer dbLeft = ticketTypeService.getById(order.getTicketTypeId()).getLeftStock();
-            seckillScriptExecutor.syncRedisStockFromDb(order.getTicketTypeId(), dbLeft);
-        }
-
-        String userOrderStatusKey = "user:order:status:" +
-                order.getUserId() + ":" + order.getTicketTypeId();
-        stringRedisTemplate.delete(userOrderStatusKey);
 
         log.info("订单取消完成，订单ID：{}", order.getId());
     }

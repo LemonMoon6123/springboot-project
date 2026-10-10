@@ -291,9 +291,12 @@ public class CacheClient {
     /**
      * 缓存穿透问题解决方案 - Redisson布隆过滤器
      * 首次获取时自动初始化（预计放入10000个元素，误判率5%），重复调用tryInit是幂等的，不影响使用。
+     * 底层把位数组存在 Redis 的 Bitmap 中，通过 SETBIT / GETBIT 操作位，每个哈希函数的结果映射到一个位偏移量，多个位同时为1时才可能是存在。
+     * 不支持删除元素；误判率随插入数量增加而上升
      */
     public RBloomFilter<String> getBloomFilter(String key) {
         RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter(key);
+        // 如果该布隆过滤器在 Redis 中尚未初始化，它会根据这两个参数计算所需的位数组大小和哈希函数个数，并在 Redis 中创建对应的 Bitmap。
         bloomFilter.tryInit(10000L, 0.05);
         return bloomFilter;
     }

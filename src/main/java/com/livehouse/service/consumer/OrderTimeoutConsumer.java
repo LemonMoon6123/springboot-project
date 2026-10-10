@@ -18,6 +18,12 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * 回补顺序：先 MySQL，再 Redis。
  * 若先还 Redis、MySQL 失败，会造成 Redis 虚高，后续出现「Lua 通过但建单扣库存失败」。
+ * 业务流程：只会针对未支付订单消息。先设置订单状态为已取消，再归还数据库库存，最后回滚redis缓存库存 + 用户限购次数、清除用户待支付状态。
+ * 兜底：本方法带 @Transactional，CAS取消订单与MySQL归还库存在同一事务内原子提交/回滚，
+ * 因此不会出现「订单已取消但DB库存没还」的半完成态——失败时订单会回滚为待支付。
+ * 本死信队列未再绑定下级死信交换机，重试(max-attempts)耗尽后 nack(requeue=false) 消息会被broker直接丢弃；
+ * 丢弃时残留「订单待支付 + Redis库存少一份」，由 OrderTimeoutScheduledTask 每5分钟扫描待支付超时订单二次兜底收敛。
+ * 若DB归还成功但Redis归还失败，则将Redis校准对齐DB当前值。
  */
 @Slf4j
 @Component

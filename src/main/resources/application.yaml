@@ -35,7 +35,7 @@ spring:
         # 方法正常返回 → 框架 basicAck(deliveryTag, false) → broker 删消息
         # 方法抛异常   → 框架 basicNack(deliveryTag, defaultRequeueRejected) → broker 按 requeue 决定去向
         acknowledge-mode: auto
-        # 初始消费者线程数量
+        # 初始消费者线程数量 ——>  RabbitMQ 的队列模型保证： 一条消息只会投递给一个消费者 。`concurrency: 5` 的含义是容器创建 5 个消费者线程，它们各自从队列里抢不同的消息并行处理——5 条不同消息同时被 5 个线程处理，而不是 1 条消息被 5 个线程抢着处理。
         concurrency: 5
         # 动态扩容的最大数量
         max-concurrency: 10
@@ -45,6 +45,7 @@ spring:
           max-attempts: 3
         # 设置broker（RabbitMQ）默认消息投递规则： false代表消费失败(nack)不重新投递消息入队
         default-requeue-rejected: false
+        prefetch: 10
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
 mybatis-plus:
