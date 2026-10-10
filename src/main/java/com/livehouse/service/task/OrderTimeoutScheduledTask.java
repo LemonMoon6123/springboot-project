@@ -111,7 +111,8 @@ public class OrderTimeoutScheduledTask {
                     order.getUserId() + ":" + order.getTicketTypeId();
             stringRedisTemplate.delete(userOrderStatusKey);
         } catch (Exception e) {
-            if (!dbRestored) { // DB归还失败就回滚订单状态
+            // DB归还失败就回滚订单状态
+            if (!dbRestored) {
                 ticketOrderService.update()
                         .set("orderStatus", 1)
                         .eq("id", order.getId())

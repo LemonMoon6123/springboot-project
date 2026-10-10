@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 日志输出目录（D盘） -->
+    <property name="LOG_HOME" value="D:/logs/livehouse-ticket"/>
+    <!-- 格式：时间 [线程] 级别 logger:行号 - 消息 -->
+    <property name="LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50}:%L - %msg%n"/>
+
+    <!-- 控制台输出（开发调试用） -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 滚动文件输出：按天 + 单文件100MB滚动，自动压缩归档并清理历史 -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/livehouse-ticket.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- 归档文件名：%d按天分割，%i为当日第几个分卷，gz压缩省空间 -->
+            <fileNamePattern>${LOG_HOME}/livehouse-ticket.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <!-- 归档保留30天 -->
+            <maxHistory>30</maxHistory>
+            <!-- 归档总容量上限，超出自动清理最旧的 -->
+            <totalSizeCap>5GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+    <!-- 项目包级别仍由application.yaml的logging.level.com.livehouse控制 -->
+</configuration>
