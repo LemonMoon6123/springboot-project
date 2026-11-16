@@ -5,6 +5,7 @@ import com.livehouse.entity.StatusCode;
 import com.livehouse.exception.StatusCodeException;
 import com.livehouse.service.app.AppPayService;
 import com.livehouse.utils.UserHolder;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -30,6 +31,7 @@ public class AppPayController {
         return appPayService.handleWxNotify(body == null ? new java.util.HashMap<>() : body);
     }
 
+    @Profile({"default", "dev"})
     @PostMapping("/mock/{orderId}")
     public Result mockPay(@PathVariable Long orderId) {
         requireLogin();

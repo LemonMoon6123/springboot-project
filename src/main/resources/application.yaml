@@ -84,6 +84,9 @@ livehouse:
   wx-login:
     mock-openid: true
     mock-openid-prefix: dev_wx_openid_
+  # 本地冒烟/附录 I.2；生产留空或删除，走真实短信随机码
+  sms:
+    fixed-login-code: "123456"
   upload:
     dir: frontend-livehouse/uploads
     url-prefix: /uploads/

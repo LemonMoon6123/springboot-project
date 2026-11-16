@@ -10,6 +10,7 @@ import com.livehouse.entity.Result;
 import com.livehouse.entity.StatusCode;
 import com.livehouse.dto.UserDTO;
 import com.livehouse.entity.User;
+import com.livehouse.config.LivehouseProperties;
 import com.livehouse.mapper.UserMapper;
 import com.livehouse.service.IUserService;
 import com.livehouse.utils.RegexUtils;
@@ -33,6 +34,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+    @Autowired
+    private LivehouseProperties livehouseProperties;
 
     @Override
     public Result sendCode(String phone) {
@@ -42,8 +45,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             return Result.fail(StatusCode.PHONE_FORMAT_ERROR);
         }
         
-        // 3.符合，生成验证码
-        String code = RandomUtil.randomNumbers(6);
+        // 3.符合，生成验证码（联调可配置固定码，见 livehouse.sms.fixed-login-code）
+        String fixed = livehouseProperties.getSms() == null ? null : livehouseProperties.getSms().getFixedLoginCode();
+        String code = (fixed != null && !fixed.isEmpty()) ? fixed : RandomUtil.randomNumbers(6);
         
         // 4.保存验证码到
         stringRedisTemplate.opsForValue().set(LOGIN_CODE_KEY + phone, code, LOGIN_CODE_TTL, TimeUnit.MINUTES);

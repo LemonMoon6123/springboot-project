@@ -20,6 +20,7 @@ public class LivehouseProperties {
     private Upload upload = new Upload();
     private Ticket ticket = new Ticket();
     private WxLogin wxLogin = new WxLogin();
+    private Sms sms = new Sms();
 
     @Data
     public static class Pay {
@@ -69,5 +70,11 @@ public class LivehouseProperties {
         /** dev：任意 code 映射为固定 openid，无需微信密钥 */
         private boolean mockOpenid = true;
         private String mockOpenidPrefix = "dev_wx_openid_";
+    }
+
+    @Data
+    public static class Sms {
+        /** 非空时发码/登录均使用该固定码（仅本地联调） */
+        private String fixedLoginCode;
     }
 }
