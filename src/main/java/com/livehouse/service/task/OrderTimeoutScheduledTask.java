@@ -1,5 +1,6 @@
 package com.livehouse.service.task;
 
+import com.livehouse.config.LivehouseProperties;
 import com.livehouse.entity.TicketOrder;
 import com.livehouse.service.ITicketOrderService;
 import com.livehouse.service.ITicketTypeService;
@@ -33,17 +34,23 @@ public class OrderTimeoutScheduledTask {
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
+    @Autowired
+    private LivehouseProperties livehouseProperties;
+
     @Scheduled(fixedRate = 5 * 60 * 1000)
     public void cancelTimeoutOrders() {
         log.info("开始执行订单超时兜底任务");
 
         try {
-            LocalDateTime timeoutThreshold = LocalDateTime.now().minusMinutes(15);
+            LocalDateTime now = LocalDateTime.now();
 
             List<TicketOrder> timeoutOrders = ticketOrderService.lambdaQuery()
                     .eq(TicketOrder::getPayStatus, 0)
                     .eq(TicketOrder::getOrderStatus, 1)
-                    .lt(TicketOrder::getCreateTime, timeoutThreshold)
+                    .and(w -> w.lt(TicketOrder::getExpireTime, now)
+                            .or(q -> q.isNull(TicketOrder::getExpireTime)
+                                    .lt(TicketOrder::getCreateTime, now.minusMinutes(
+                                            livehouseProperties.getOrder().getPayTimeoutMinutes()))))
                     .list();
 
             if (timeoutOrders.isEmpty()) {
@@ -73,6 +80,8 @@ public class OrderTimeoutScheduledTask {
 
         boolean cancelled = ticketOrderService.update()
                 .set("orderStatus", 3)
+                .set("cancelTime", LocalDateTime.now())
+                .set("cancelReason", "超时未支付，系统自动关闭")
                 .eq("id", order.getId())
                 .eq("orderStatus", 1)
                 .eq("payStatus", 0)

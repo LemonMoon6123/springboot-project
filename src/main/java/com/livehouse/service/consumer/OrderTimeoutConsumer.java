@@ -13,6 +13,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 /**
  * 订单超时死信队列消费者
  *
@@ -67,6 +69,8 @@ public class OrderTimeoutConsumer {
             // CAS 取消：与定时任务互斥，避免两边各归还一次库存
             boolean cancelled = ticketOrderService.update()
                     .set("orderStatus", 3)
+                    .set("cancelTime", LocalDateTime.now())
+                    .set("cancelReason", "超时未支付")
                     .eq("id", message.getOrderId())
                     .eq("orderStatus", 1)
                     .eq("payStatus", 0)

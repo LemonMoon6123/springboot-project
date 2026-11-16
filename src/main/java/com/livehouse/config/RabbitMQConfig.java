@@ -1,6 +1,7 @@
 package com.livehouse.config;
 
 import org.springframework.amqp.core.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,6 +11,9 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class RabbitMQConfig {
+
+    @Autowired
+    private LivehouseProperties livehouseProperties;
 
     // ==================== 秒杀下单队列配置 ====================
     
@@ -126,13 +130,11 @@ public class RabbitMQConfig {
      */
     public static final String DLX_ROUTING_KEY = "dlx.order";
 
-    /**
-     * 延迟队列（15分钟TTL）
-     */
-    @Bean("delayQueue")
+  @Bean("delayQueue")
     public Queue delayQueue() {
+        int minutes = livehouseProperties.getOrder().getPayTimeoutMinutes();
         return QueueBuilder.durable(DELAY_QUEUE)
-                .withArgument("x-message-ttl", 15 * 60 * 1000) // 15分钟TTL
+                .withArgument("x-message-ttl", minutes * 60 * 1000)
                 .withArgument("x-dead-letter-exchange", DLX_EXCHANGE) // 死信交换机
                 .withArgument("x-dead-letter-routing-key", DLX_ROUTING_KEY) // 死信路由键
                 .build();
