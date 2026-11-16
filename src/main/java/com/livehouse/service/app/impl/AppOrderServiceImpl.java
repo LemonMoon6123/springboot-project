@@ -453,6 +453,16 @@ public class AppOrderServiceImpl implements AppOrderService {
                     || audiences.stream().anyMatch(a -> !userId.equals(a.getUserId()))) {
                 throw new StatusCodeException(StatusCode.AUDIENCE_NOT_FOUND);
             }
+            if (realName == 1) {
+                for (Audience a : audiences) {
+                    if (a.getAuthStatus() == null || a.getAuthStatus() != 1) {
+                        ctx.blockReason = "观演人未完成实名认证";
+                        if (throwOnBlock) {
+                            throw new StatusCodeException(StatusCode.AUDIENCE_NOT_AUTHENTICATED);
+                        }
+                    }
+                }
+            }
         }
         ctx.audiences = audiences;
         ctx.audienceBriefs = audiences.stream().map(a -> {
