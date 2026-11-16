@@ -92,15 +92,12 @@ public class TicketEncryptionUtils {
             
             // 2. 从原始票号中提取ticketId (ET123456789 → 123456789)
             Long ticketId = extractTicketId(originalTicketCode);
-            
-            // 3. 对ticketId进行唯一变换（保证一对一映射，无冲突）
-            long uniqueOffset = transformTicketId(ticketId);
-            
-            // 4. 取低32位作为最终偏移量
-            long offset = uniqueOffset & 0xFFFFFFFFL;
-            
-            log.debug("计算唯一BitMap偏移量，原始票号：{}，ticketId：{}，变换后：{}，最终偏移量：{}", 
-                     originalTicketCode, ticketId, uniqueOffset, offset);
+
+            // 3. 计算确定性唯一偏移量（混入天序号，避免当日count跨天重复导致撞位）
+            long offset = calculateUniqueOffset(ticketId);
+
+            log.debug("计算唯一BitMap偏移量，原始票号：{}，ticketId：{}，最终偏移量：{}",
+                     originalTicketCode, ticketId, offset);
             
             return offset;
         } catch (Exception e) {
@@ -127,24 +124,26 @@ public class TicketEncryptionUtils {
     }
 
     /**
-     * 对ticketId进行唯一变换
-     * 使用数学变换保证一对一映射（无冲突）+ 增加随机性（不可预测）
+     * 计算确定性唯一的BitMap偏移量（旧方案：XOR+乘质数后截断低32位）
+     *
+     * 旧方案缺陷：XOR与乘法在模2^32下，低32位输出只由低32位输入决定，
+     * 时间戳（高32位）对offset零影响 → offset实际只是"当日count"的打乱。
+     * 而count按天重置（icr:xxx:yyyy:MM:dd每天从1重计），同一场演出跨天售票时
+     * 不同天的同序号票会算出相同offset，共用同一个bit，后核销者被误判"已使用过"。
+     *
+     * 新方案：offset = 天序号 × 1000000 + 当日count，确定性一一映射，零冲突。
+     * - ticketId高32位=秒级时间戳（相对BEGIN_TIMESTAMP），低32位=当日递增count
+     * - 同天count唯一、不同天dayIndex不同 → 任意两张票offset必不相同
+     * - 容量约束：单日售票量需 < 100万；2^32内可表示约4294天（约11.7年）不越界
+     * - bitmap内存随最大offset线性增长（≈offset/8字节），不再被随机打散撑大
+     *
+     * 酒店每层 100 万个房间，房间号 = count，楼层号 = dayIndex——只要每层入住不超员，任何两个房客的“楼层+房间号”组合必不相同。
      */
-    private long transformTicketId(Long ticketId) {
-        // 常数选择：大质数，确保良好的分布特性
-        final long PRIME_MULTIPLIER = 0x9E3779B97F4A7C15L;  // 黄金比例相关的大质数
-        final long XOR_SALT = 0x123456789ABCDEFL;          // 固定异或盐值
-        
-        // 可逆变换公式：(ticketId ⊕ salt) × prime
-        // 这种变换具有以下特性：
-        // 1. 一对一映射：不同的ticketId得到不同的结果（无冲突）
-        // 2. 伪随机性：结果看起来是随机的（不可预测）
-        // 3. 可逆性：理论上可以逆向计算（但需要知道算法和常数）
-        long transformed = (ticketId ^ XOR_SALT) * PRIME_MULTIPLIER;
-        
-        log.debug("ticketId变换：{} → {}", ticketId, transformed);
-        
-        return transformed;
+    private long calculateUniqueOffset(Long ticketId) {
+        long timestamp = ticketId >>> 32;      // 秒级时间戳（相对起始时间）
+        long count = ticketId & 0xFFFFFFFFL;   // 当日递增序号
+        long dayIndex = timestamp / 86400;     // 天序号
+        return dayIndex * 1_000_000L + count;
     }
 
     /**

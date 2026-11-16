@@ -1,7 +1,7 @@
 package com.livehouse.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
 import com.livehouse.entity.ElectronicTicket;
 
 /**

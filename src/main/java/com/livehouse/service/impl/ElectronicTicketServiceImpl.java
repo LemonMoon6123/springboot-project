@@ -1,7 +1,8 @@
 package com.livehouse.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
 import com.livehouse.entity.CheckInRecord;
 import com.livehouse.entity.ElectronicTicket;
 import com.livehouse.entity.TicketOrder;
@@ -52,11 +53,11 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
         // 1. 查询订单信息
         TicketOrder order = ticketOrderService.getById(orderId);
         if (order == null) {
-            return Result.fail("订单不存在");
+            return Result.fail(StatusCode.ORDER_NOT_FOUND);
         }
 
         if (order.getPayStatus() != 1) {
-            return Result.fail("订单未支付，无法生成电子票");
+            return Result.fail(StatusCode.ORDER_NOT_PAID, "订单未支付，无法生成电子票");
         }
 
         // 2. 检查是否已生成电子票
@@ -97,7 +98,7 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
         // 4. 批量保存到数据库
         boolean saveSuccess = saveBatch(electronicTickets);
         if (!saveSuccess) {
-            return Result.fail("生成电子票失败");
+            return Result.fail(StatusCode.TICKET_GENERATE_FAILED);
         }
 
         log.info("电子票生成成功，订单ID：{}，生成数量：{}", orderId, electronicTickets.size());
@@ -127,7 +128,7 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
             
             if (!validationResult.isValid()) {
                 log.warn("票号验证失败：{}", validationResult.getErrorMessage());
-                return Result.fail(validationResult.getErrorMessage());
+                return Result.fail(StatusCode.TICKET_CODE_INVALID, validationResult.getErrorMessage());
             }
 
             String originalTicketCode = validationResult.getOriginalTicketCode();
@@ -139,15 +140,15 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
                     .one();
 
             if (ticket == null) {
-                return Result.fail("电子票不存在");
+                return Result.fail(StatusCode.TICKET_NOT_FOUND);
             }
 
             if (ticket.getVerifyStatus() != null && ticket.getVerifyStatus() == 1) {
-                return Result.fail("电子票已核销");
+                return Result.fail(StatusCode.TICKET_ALREADY_USED);
             }
 
             if (ticket.getVerifyStatus() != null && ticket.getVerifyStatus() == 2) {
-                return Result.fail("该电子票已退票作废，无法核销");
+                return Result.fail(StatusCode.TICKET_REFUNDED, "该电子票已退票作废，无法核销");
             }
 
             // 3. 用加密票号计算BitMap位置（更安全，基于票号而非ID）
@@ -159,7 +160,7 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
             
             if (Boolean.TRUE.equals(previousValue)) {
                 log.warn("电子票已核销，原始票号：{}", originalTicketCode);
-                return Result.fail("电子票已经被使用过！");
+                return Result.fail(StatusCode.TICKET_ALREADY_USED);
             }
 
             try {
@@ -183,12 +184,12 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
                 // 异常回滚：清除BitMap标记
                 stringRedisTemplate.opsForValue().setBit(bitmapKey, ticketPosition, false);
                 log.error("电子票核销失败，已回滚，原始票号：{}", originalTicketCode, e);
-                return Result.fail("核销失败");
+                return Result.fail(StatusCode.VERIFY_FAILED);
             }
 
         } catch (Exception e) {
             log.error("票号解密或验证异常：{}", e.getMessage(), e);
-            return Result.fail("票号无效：" + e.getMessage());
+            return Result.fail(StatusCode.TICKET_CODE_INVALID, "票号无效：" + e.getMessage());
         }
     }
 
@@ -199,7 +200,7 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
                 .one();
 
         if (ticket == null) {
-            return Result.fail("电子票不存在");
+            return Result.fail(StatusCode.TICKET_NOT_FOUND);
         }
 
         return Result.ok(ticket);

@@ -1,18 +1,15 @@
 package com.livehouse.service.impl;
 
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
 import com.livehouse.dto.SeckillOrderMessage;
-import com.livehouse.dto.UserDTO;
-import com.livehouse.entity.TicketOrder;
 import com.livehouse.entity.TicketType;
-import com.livehouse.exception.CustomException;
 import com.livehouse.service.IMessageProducerService;
 import com.livehouse.service.ISeckillTicketService;
 import com.livehouse.service.ITicketOrderService;
 import com.livehouse.service.ITicketTypeService;
 import com.livehouse.utils.RedisIDGenerator;
 import com.livehouse.utils.SeckillScriptExecutor;
-import com.livehouse.utils.SimpleRedisLock;
 import com.livehouse.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
@@ -22,13 +19,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -68,21 +61,21 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
 //        // 1.1 查询票种信息
 //        TicketType ticketType = ticketTypeService.getById(ticketTypeId);
 //        if (ticketType == null) {
-//            return Result.fail("票种不存在");
+//            return Result.fail(StatusCode.TICKET_TYPE_NOT_FOUND);
 //        }
 //
 //        // 1.2 检查售票时间
 //        LocalDateTime now = LocalDateTime.now();
 //        if (ticketType.getSaleStartTime().isAfter(now)) {
-//            return Result.fail("售票尚未开始！");
+//            return Result.fail(StatusCode.SALE_NOT_STARTED);
 //        }
 //        if (ticketType.getSaleEndTime() != null && ticketType.getSaleEndTime().isBefore(now)) {
-//            return Result.fail("售票已经结束啦！");
+//            return Result.fail(StatusCode.SALE_ENDED);
 //        }
 //
 //        // 1.3 校验购买数量
 //        if (quantity == null || quantity == 0) {
-//            return Result.fail("购买数量不能为空！");
+//            return Result.fail(StatusCode.QUANTITY_ILLEGAL);
 //        }
 
         // 1.4 获取当前用户信息
@@ -92,7 +85,7 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
         String userOrderStatusKey = "user:order:status:" + userId + ":" + ticketTypeId;
         String orderStatus = stringRedisTemplate.opsForValue().get(userOrderStatusKey);
         if ("PENDING".equals(orderStatus)) {
-            return Result.fail("您有未支付的订单，请先完成支付！");
+            return Result.fail(StatusCode.PENDING_ORDER_EXISTS);
         }
 
         // 2.为线程创建分布式锁
@@ -104,13 +97,13 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
             boolean getLock = lock.tryLock();
             // 2.2 如果获取锁失败，代表是相同用户线程，则挡住多余请求线程。
             if (!getLock) {
-                return Result.fail("请勿重复点击！");
+                return Result.fail(StatusCode.REPEAT_SUBMIT);
             }
 
             // 2.3 再次检查Redis状态，更稳妥一些。因为当该用户线程成功完成创建订单后，释放锁的一瞬间可能仍有大量该用户进程再申请锁（该用户期间一直在不断点击）
             orderStatus = stringRedisTemplate.opsForValue().get(userOrderStatusKey);
             if ("PENDING".equals(orderStatus)) {
-                return Result.fail("您有未支付的订单，请先完成支付！");
+                return Result.fail(StatusCode.PENDING_ORDER_EXISTS);
             }
 
             // 2.4 如果获取锁成功，执行Lua脚本，进行购买资格校验和扣减redis库存等操作。
@@ -122,7 +115,7 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
 
             // 2.5 根据脚本执行结果处理
             if (!seckillResult.isSuccess()) {
-                return Result.fail(seckillResult.getMessage());
+                return Result.fail(toStatusCode(seckillResult));
             }
 
             // 2.6 标记用户有待支付订单（设置20分钟过期）
@@ -160,16 +153,30 @@ public class SeckillTicketServiceImpl implements ISeckillTicketService {
                 // 消息发送失败，需要恢复Redis库存,清除用户下单状态，让用户可以进行后续重试。
                 restoreStock(ticketTypeId, userId, quantity);
                 stringRedisTemplate.delete(userOrderStatusKey);
-                return Result.fail("系统繁忙，请稍后再试！");
+                return Result.fail(StatusCode.SYSTEM_BUSY);
             }
 
         }catch (Exception e) {
-            return Result.fail("系统繁忙，请稍后再试");
+            return Result.fail(StatusCode.SYSTEM_BUSY);
         } finally {
             if (lock.isHeldByCurrentThread()) {  // 检查是否持有锁
                 // 2.9 释放锁
                 lock.unlock();
             }
+        }
+    }
+
+    /**
+     * 把 Lua 脚本的执行结果映射为对外业务状态码
+     */
+    private StatusCode toStatusCode(SeckillScriptExecutor.SeckillResult seckillResult) {
+        switch (seckillResult) {
+            case INSUFFICIENT_STOCK:
+                return StatusCode.STOCK_NOT_ENOUGH;
+            case EXCEED_LIMIT:
+                return StatusCode.LIMIT_PER_USER_EXCEEDED;
+            default:
+                return StatusCode.SYSTEM_BUSY;
         }
     }
 

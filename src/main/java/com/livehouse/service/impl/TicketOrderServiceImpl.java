@@ -2,7 +2,8 @@ package com.livehouse.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.livehouse.dto.RefundMessage;
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
 import com.livehouse.entity.ElectronicTicket;
 import com.livehouse.entity.RefundRecord;
 import com.livehouse.entity.Show;
@@ -60,15 +61,15 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
         // 1. 查询订单
         TicketOrder order = getById(orderId);
         if (order == null) {
-            return Result.fail("订单不存在");
+            return Result.fail(StatusCode.ORDER_NOT_FOUND);
         }
 
         if (order.getPayStatus() == 1) {
-            return Result.fail("订单已支付");
+            return Result.fail(StatusCode.ORDER_ALREADY_PAID);
         }
 
         if (order.getOrderStatus() == 3) {
-            return Result.fail("订单已取消，无法支付");
+            return Result.fail(StatusCode.ORDER_STATUS_ILLEGAL, "订单已取消，无法支付");
         }
 
         // 2. 更新订单状态为已支付
@@ -78,7 +79,7 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
         boolean updateSuccess = updateById(order);
 
         if (!updateSuccess) {
-            return Result.fail("支付失败");
+            return Result.fail(StatusCode.PAY_FAILED);
         }
 
         // 3. 清除用户待支付状态
@@ -89,7 +90,7 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
         Result ticketResult = electronicTicketService.generateElectronicTickets(orderId);
         if (!ticketResult.getSuccess()) {
             log.error("生成电子票失败，订单ID：{}，错误信息：{}", orderId, ticketResult.getErrorMsg());
-            return Result.fail("支付成功，但生成电子票失败：" + ticketResult.getErrorMsg());
+            return Result.fail(StatusCode.TICKET_GENERATE_FAILED, "支付成功，但生成电子票失败：" + ticketResult.getErrorMsg());
         }
 
         log.info("模拟支付成功，订单ID：{}", orderId);
@@ -113,20 +114,20 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
         // 1. 查询订单并校验归属
         TicketOrder order = getById(orderId);
         if (order == null || !order.getUserId().equals(userId)) {
-            return Result.fail("订单不存在");
+            return Result.fail(StatusCode.ORDER_NOT_FOUND);
         }
 
         if (order.getPayStatus() != 1) {
-            return Result.fail("订单未支付，无需退票，请直接取消订单");
+            return Result.fail(StatusCode.ORDER_NOT_PAID, "订单未支付，无需退票，请直接取消订单");
         }
         if (order.getOrderStatus() == 4) {
-            return Result.fail("订单已退票，请勿重复申请");
+            return Result.fail(StatusCode.REFUND_DUPLICATED);
         }
         if (order.getOrderStatus() == 3) {
-            return Result.fail("订单已取消，无法退票");
+            return Result.fail(StatusCode.ORDER_STATUS_ILLEGAL, "订单已取消，无法退票");
         }
         if (order.getOrderStatus() != 2) {
-            return Result.fail("订单当前状态不支持退票");
+            return Result.fail(StatusCode.REFUND_NOT_ALLOWED);
         }
 
         // 2. 幂等校验：同一订单是否已经存在退票记录（防止重复点击产生多条记录）
@@ -134,7 +135,8 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
                 .eq(RefundRecord::getOrderId, orderId)
                 .one();
         if (existingRecord != null) {
-            return Result.fail("该订单已提交过退票申请，当前状态：" + describeRefundStatus(existingRecord.getStatus()));
+            return Result.fail(StatusCode.REFUND_DUPLICATED,
+                    "该订单已提交过退票申请，当前状态：" + describeRefundStatus(existingRecord.getStatus()));
         }
 
         // 3. 电子票已核销则拒绝退票
@@ -143,13 +145,13 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
                 .list();
         boolean anyVerified = tickets.stream().anyMatch(t -> t.getVerifyStatus() != null && t.getVerifyStatus() == 1);
         if (anyVerified) {
-            return Result.fail("该订单下已有电子票核销入场，无法退票");
+            return Result.fail(StatusCode.REFUND_TICKET_USED);
         }
 
         // 4. 演出已开始则拒绝退票
         Show show = showService.getById(order.getShowId());
         if (show != null && show.getStartTime() != null && !show.getStartTime().isAfter(LocalDateTime.now())) {
-            return Result.fail("演出已开始，无法退票");
+            return Result.fail(StatusCode.REFUND_SHOW_STARTED);
         }
 
         // 5. 更新订单状态为已退票
@@ -205,14 +207,14 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
     public Result getRefundStatus(Long orderId, Long userId) {
         TicketOrder order = getById(orderId);
         if (order == null || !order.getUserId().equals(userId)) {
-            return Result.fail("订单不存在");
+            return Result.fail(StatusCode.ORDER_NOT_FOUND);
         }
 
         RefundRecord record = refundRecordService.lambdaQuery()
                 .eq(RefundRecord::getOrderId, orderId)
                 .one();
         if (record == null) {
-            return Result.fail("该订单暂无退票记录");
+            return Result.fail(StatusCode.REFUND_NOT_FOUND);
         }
         return Result.ok(record);
     }

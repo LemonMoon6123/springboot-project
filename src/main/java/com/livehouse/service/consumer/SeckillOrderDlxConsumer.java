@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
  * 只做一件事，对于异常无法消费的消息（大概率是订单始终无法被创建导致异常被不断捕获重试，最终次数耗尽被broker投递到这里），
  * 会同步数据库与redis缓存的库存数据、回滚用户限购次数、清除用户对于该订单对应的票的待支付状态，让用户可以进行后续尝试再次下单。
  */
+
 @Slf4j
 @Component
 public class SeckillOrderDlxConsumer {

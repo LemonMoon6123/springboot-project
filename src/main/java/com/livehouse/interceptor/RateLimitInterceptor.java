@@ -1,7 +1,8 @@
 package com.livehouse.interceptor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
 import com.livehouse.utils.RateLimitExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,7 +44,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             response.setStatus(429);
             response.setContentType("application/json;charset=UTF-8");
             
-            Result result = Result.fail("请求过于频繁，请稍后再试");
+            Result result = Result.fail(StatusCode.TOO_MANY_REQUESTS);
             String jsonResponse = objectMapper.writeValueAsString(result);
             response.getWriter().write(jsonResponse);
             

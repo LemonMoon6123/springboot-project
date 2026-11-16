@@ -1,6 +1,6 @@
 package com.livehouse.service;
 
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
 
 /**
  * 秒杀票务服务接口

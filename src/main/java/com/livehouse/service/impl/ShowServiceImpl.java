@@ -5,7 +5,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
 import com.livehouse.dto.ShowDTO;
 import com.livehouse.entity.Show;
 import com.livehouse.entity.TicketType;
@@ -64,7 +65,7 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
                 this::getShowWithDetails, CACHE_SHOW_TTL, TimeUnit.MINUTES);
                 
         if (show == null) {
-            return Result.fail("未查到该演出信息，该演出不存在！");
+            return Result.fail(StatusCode.SHOW_NOT_FOUND);
         }
         
         return Result.ok(show);
@@ -100,7 +101,7 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
     public Result update(Show show) {
         Long id = show.getId();
         if (id == null) {
-            return Result.fail("该演出不存在！");
+            return Result.fail(StatusCode.SHOW_NOT_FOUND);
         }
         
         // 1. 先更新数据库
