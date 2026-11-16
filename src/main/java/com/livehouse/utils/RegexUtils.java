@@ -13,6 +13,9 @@ public class RegexUtils {
      */
     public static final String EMAIL_REGEX = "^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)+$";
 
+    /** 18 位身份证（宽松校验） */
+    public static final String ID_CARD_REGEX = "^[1-9]\\d{5}(18|19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[\\dXx]$";
+
     /**
      * 校验是否为有效手机格式
      * @param phone 要校验的手机号
@@ -28,6 +31,10 @@ public class RegexUtils {
      */
     public static boolean isEmailInvalid(String email){
         return mismatch(email, EMAIL_REGEX);
+    }
+
+    public static boolean isIdCardValid(String idCard) {
+        return idCard != null && idCard.matches(ID_CARD_REGEX);
     }
 
     // 校验是否不符合正则格式

@@ -11,7 +11,6 @@ import java.time.LocalDate;
 public class UserProfileDTO {
     private Long id;
     private String phone;
-    private String password;
     private String nickName;
     private String icon;
     private String city;

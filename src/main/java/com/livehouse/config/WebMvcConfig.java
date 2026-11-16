@@ -54,7 +54,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/ticket/verify",       // 电子票核销（无路径参数形式）
                         "/ticket/verify/**",    // 电子票核销（路径参数形式）
                         "/ticket/detail",       // 电子票详情（Query参数形式）
-                        "/ticket/detail/**"
+                        "/ticket/detail/**",
+                        "/app/user/login/wx",
+                        "/app/show/**",
+                        "/app/pay/notify/wxpay"
                 ).order(1);
     }
 

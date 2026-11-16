@@ -48,6 +48,10 @@ spring:
         prefetch: 10
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
 mybatis-plus:
   type-aliases-package: com.livehouse.entity # 别名扫描包
   global-config:
@@ -59,6 +63,29 @@ logging:
     com.livehouse: debug
 
 livehouse:
+  pay:
+    mock-enabled: true
+    wx:
+      app-id: ${WX_APPID:}
+      mch-id: ${WX_MCHID:}
+      api-v3-key: ${WX_APIV3_KEY:}
+      cert-serial-no: ${WX_CERT_SERIAL:}
+      private-key-path: ${WX_PRIVATE_KEY_PATH:/opt/cert/apiclient_key.pem}
+      platform-cert-path: ${WX_PLATFORM_CERT_PATH:/opt/cert/wechatpay_platform.pem}
+      notify-url: ${WX_NOTIFY_URL:https://api.example.com/app/pay/notify/wxpay}
+  order:
+    pay-timeout-minutes: 15
+    service-fee-per-ticket: 6.00
+    refund-deadline-days: 7
+  credit:
+    rate-per-yuan: 0.05
+    issue-delay-hours: 24
+    expire-months: 24
+  wx-login:
+    mock-openid: true
+    mock-openid-prefix: dev_wx_openid_
   upload:
     dir: frontend-livehouse/uploads
     url-prefix: /uploads/
+  ticket:
+    encryption-key: LiveHouse2024SecretKey!@#$%^&*()
