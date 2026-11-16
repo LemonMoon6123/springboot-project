@@ -36,10 +36,6 @@ public class Result {
         return new Result(false, errorMsg, null, null, sc.getCode());
     }
 
-    /**
-     * 业务失败 + 附带数据。
-     * data 用于前端需要接着处理错误的场景，例如重复核销时把首次核销时间和闸机口带回去。
-     */
     public static Result fail(StatusCode sc, String errorMsg, Object data) {
         return new Result(false, errorMsg != null && !errorMsg.isEmpty() ? errorMsg : sc.getMsg(), data, null, sc.getCode());
     }

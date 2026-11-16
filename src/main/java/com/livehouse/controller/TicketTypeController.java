@@ -1,6 +1,6 @@
 package com.livehouse.controller;
 
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
 import com.livehouse.service.ITicketTypeService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

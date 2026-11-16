@@ -1,6 +1,6 @@
 package com.livehouse.controller;
 
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
 import com.livehouse.service.ISeckillTicketService;
 import org.springframework.web.bind.annotation.*;
 

@@ -1,6 +1,7 @@
 package com.livehouse.controller;
 
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
 import com.livehouse.service.IDataScreenService;
 import com.livehouse.utils.SeckillScriptExecutor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,11 +56,11 @@ public class AdminController {
                         ticketTypeId, userId, quantity);
                 return Result.ok("库存恢复成功");
             } else {
-                return Result.fail("库存恢复失败，结果码：" + result);
+                return Result.fail(StatusCode.STOCK_RESTORE_FAILED, "库存恢复失败，结果码：" + result);
             }
         } catch (Exception e) {
             log.error("手动恢复Redis库存失败", e);
-            return Result.fail("库存恢复失败：" + e.getMessage());
+            return Result.fail(StatusCode.STOCK_RESTORE_FAILED, "库存恢复失败：" + e.getMessage());
         }
     }
 
@@ -156,7 +157,7 @@ public class AdminController {
             return Result.ok(overview);
         } catch (Exception e) {
             log.error("获取数据大屏总览数据失败", e);
-            return Result.fail("获取数据失败：" + e.getMessage());
+            return Result.fail(StatusCode.SERVER_ERROR, "获取数据失败：" + e.getMessage());
         }
     }
 
@@ -171,7 +172,7 @@ public class AdminController {
             return Result.ok(revenue);
         } catch (Exception e) {
             log.error("获取营收分析数据失败", e);
-            return Result.fail("获取营收数据失败：" + e.getMessage());
+            return Result.fail(StatusCode.SERVER_ERROR, "获取营收数据失败：" + e.getMessage());
         }
     }
 
@@ -186,7 +187,7 @@ public class AdminController {
             return Result.ok(shows);
         } catch (Exception e) {
             log.error("获取演出售票统计失败", e);
-            return Result.fail("获取演出数据失败：" + e.getMessage());
+            return Result.fail(StatusCode.SERVER_ERROR, "获取演出数据失败：" + e.getMessage());
         }
     }
 
@@ -201,7 +202,7 @@ public class AdminController {
             return Result.ok(orders);
         } catch (Exception e) {
             log.error("获取订单统计数据失败", e);
-            return Result.fail("获取订单数据失败：" + e.getMessage());
+            return Result.fail(StatusCode.SERVER_ERROR, "获取订单数据失败：" + e.getMessage());
         }
     }
 
@@ -216,7 +217,7 @@ public class AdminController {
             return Result.ok(rateLimit);
         } catch (Exception e) {
             log.error("获取用户限流统计失败", e);
-            return Result.fail("获取限流数据失败：" + e.getMessage());
+            return Result.fail(StatusCode.SERVER_ERROR, "获取限流数据失败：" + e.getMessage());
         }
     }
 
@@ -231,7 +232,7 @@ public class AdminController {
             return Result.ok(visits);
         } catch (Exception e) {
             log.error("获取网站访问统计失败", e);
-            return Result.fail("获取访问数据失败：" + e.getMessage());
+            return Result.fail(StatusCode.SERVER_ERROR, "获取访问数据失败：" + e.getMessage());
         }
     }
 
@@ -246,7 +247,7 @@ public class AdminController {
             return Result.ok(realtime);
         } catch (Exception e) {
             log.error("获取实时统计数据失败", e);
-            return Result.fail("获取实时数据失败：" + e.getMessage());
+            return Result.fail(StatusCode.SERVER_ERROR, "获取实时数据失败：" + e.getMessage());
         }
     }
 
@@ -271,7 +272,7 @@ public class AdminController {
             return Result.ok(allData);
         } catch (Exception e) {
             log.error("获取完整数据大屏数据失败", e);
-            return Result.fail("获取完整数据失败：" + e.getMessage());
+            return Result.fail(StatusCode.SERVER_ERROR, "获取完整数据失败：" + e.getMessage());
         }
     }
 }

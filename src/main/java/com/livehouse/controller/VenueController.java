@@ -1,6 +1,7 @@
 package com.livehouse.controller;
 
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
 import com.livehouse.entity.Venue;
 import com.livehouse.service.IVenueService;
 import org.springframework.web.bind.annotation.*;
@@ -26,7 +27,7 @@ public class VenueController {
     public Result queryVenueById(@PathVariable("id") Long id) {
         Venue venue = venueService.queryVenueById(id);
         if (venue == null) {
-            return Result.fail("场馆不存在");
+            return Result.fail(StatusCode.VENUE_NOT_FOUND);
         }
         return Result.ok(venue);
     }
@@ -60,7 +61,7 @@ public class VenueController {
     @PutMapping
     public Result updateVenue(@RequestBody Venue venue) {
         if (venue.getId() == null) {
-            return Result.fail("场馆不存在");
+            return Result.fail(StatusCode.VENUE_NOT_FOUND);
         }
         venueService.updateVenue(venue);
         return Result.ok();

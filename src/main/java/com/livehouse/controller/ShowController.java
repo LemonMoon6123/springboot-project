@@ -1,6 +1,6 @@
 package com.livehouse.controller;
 
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
 import com.livehouse.entity.Show;
 import com.livehouse.service.IShowService;
 import org.springframework.web.bind.annotation.*;

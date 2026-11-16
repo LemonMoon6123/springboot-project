@@ -1,6 +1,7 @@
 package com.livehouse.controller;
 
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
 import com.livehouse.dto.UserDTO;
 import com.livehouse.entity.TicketOrder;
 import com.livehouse.service.ITicketOrderService;
@@ -49,7 +50,7 @@ public class TicketOrderController {
                 .one();
 
         if (order == null) {
-            return Result.fail("订单不存在");
+            return Result.fail(StatusCode.ORDER_NOT_FOUND);
         }
 
         return Result.ok(order);
@@ -68,7 +69,7 @@ public class TicketOrderController {
                 .one();
 
         if (order == null) {
-            return Result.fail("订单不存在");
+            return Result.fail(StatusCode.ORDER_NOT_FOUND);
         }
 
         // 调用模拟支付服务

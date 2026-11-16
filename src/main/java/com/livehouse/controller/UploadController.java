@@ -1,6 +1,7 @@
 package com.livehouse.controller;
 
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -38,13 +39,13 @@ public class UploadController {
     public Result uploadImage(@RequestParam("file") MultipartFile file,
                               @RequestParam(value = "folder", required = false) String folder) throws IOException {
         if (file == null || file.isEmpty()) {
-            return Result.fail("请选择要上传的图片");
+            return Result.fail(StatusCode.FILE_EMPTY);
         }
 
         String originalFilename = file.getOriginalFilename();
         String extension = getExtension(originalFilename);
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            return Result.fail("仅支持 jpg、jpeg、png、gif、webp 格式图片");
+            return Result.fail(StatusCode.FILE_TYPE_NOT_ALLOWED);
         }
 
         String filename = UUID.randomUUID().toString().replace("-", "") + "." + extension;

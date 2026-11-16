@@ -18,10 +18,6 @@ public class WebExceptionAdvice {
         return Result.fail(StatusCode.SERVER_ERROR);
     }
 
-    /**
-     * 业务异常：StatusCode 直接映射成 Result.code，前端按数字分支。
-     * 不打 error 栈——业务失败是预期内的，打栈会把日志淹掉。
-     */
     @ExceptionHandler(StatusCodeException.class)
     public Result handleStatusCodeException(StatusCodeException e) {
         log.info("业务异常 code={} msg={}", e.getCode(), e.getMessage());

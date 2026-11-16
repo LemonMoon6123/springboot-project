@@ -1,7 +1,8 @@
 package com.livehouse.controller;
 
 import com.livehouse.dto.LoginFormDTO;
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
 import com.livehouse.dto.UserDTO;
 import com.livehouse.dto.UserProfileDTO;
 import com.livehouse.entity.User;
@@ -85,11 +86,11 @@ public class UserController {
     public Result profile() {
         UserDTO currentUser = UserHolder.getUser();
         if (currentUser == null) {
-            return Result.fail("未登录");
+            return Result.fail(StatusCode.UNAUTHORIZED);
         }
         User user = userService.getById(currentUser.getId());
         if (user == null) {
-            return Result.fail("用户不存在");
+            return Result.fail(StatusCode.USER_NOT_FOUND);
         }
         UserInfo userInfo = userInfoMapper.selectById(currentUser.getId());
         return Result.ok(buildProfile(user, userInfo));
@@ -102,13 +103,13 @@ public class UserController {
     public Result updateProfile(@RequestBody UserProfileDTO profile) {
         UserDTO currentUser = UserHolder.getUser();
         if (currentUser == null) {
-            return Result.fail("未登录");
+            return Result.fail(StatusCode.UNAUTHORIZED);
         }
 
         Long userId = currentUser.getId();
         User user = userService.getById(userId);
         if (user == null) {
-            return Result.fail("用户不存在");
+            return Result.fail(StatusCode.USER_NOT_FOUND);
         }
 
         if (profile.getNickName() != null) {

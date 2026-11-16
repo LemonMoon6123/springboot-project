@@ -1,6 +1,7 @@
 package com.livehouse.controller;
 
-import com.livehouse.dto.Result;
+import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
 import com.livehouse.dto.UserDTO;
 import com.livehouse.service.IElectronicTicketService;
 import com.livehouse.service.ITicketOrderService;
@@ -32,7 +33,7 @@ public class ElectronicTicketController {
     public Result simulatePayment(@PathVariable Long orderId) {
         UserDTO user = UserHolder.getUser();
         if (user == null) {
-            return Result.fail("未登录");
+            return Result.fail(StatusCode.UNAUTHORIZED);
         }
 
         return ticketOrderService.simulatePayment(orderId);
@@ -52,7 +53,7 @@ public class ElectronicTicketController {
         }
 
         if (ticketCode == null || ticketCode.trim().isEmpty()) {
-            return Result.fail("电子票码不能为空");
+            return Result.fail(StatusCode.TICKET_CODE_EMPTY);
         }
 
         ticketCode = ticketCode.trim();
@@ -75,7 +76,7 @@ public class ElectronicTicketController {
     @GetMapping("/detail")
     public Result getTicketDetailByParam(@RequestParam(value = "ticketCode", required = false) String ticketCode) {
         if (ticketCode == null || ticketCode.trim().isEmpty()) {
-            return Result.fail("电子票码不能为空");
+            return Result.fail(StatusCode.TICKET_CODE_EMPTY);
         }
         return electronicTicketService.getTicketByCode(ticketCode.trim());
     }
@@ -95,7 +96,7 @@ public class ElectronicTicketController {
     public Result myTickets() {
         UserDTO user = UserHolder.getUser();
         if (user == null) {
-            return Result.fail("未登录");
+            return Result.fail(StatusCode.UNAUTHORIZED);
         }
         return electronicTicketService.queryUserTickets(user.getId());
     }
