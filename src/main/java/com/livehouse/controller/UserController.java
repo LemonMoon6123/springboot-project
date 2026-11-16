@@ -10,11 +10,16 @@ import com.livehouse.entity.UserInfo;
 import com.livehouse.mapper.UserInfoMapper;
 import com.livehouse.service.IUserService;
 import com.livehouse.utils.UserHolder;
+import cn.hutool.core.util.StrUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
+
+import static com.livehouse.utils.RedisConstants.LOGIN_USER_KEY;
 
 /**
  * 用户控制器
@@ -29,6 +34,9 @@ public class UserController {
 
     @Resource
     private UserInfoMapper userInfoMapper;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
     /**
      * 发送手机验证码
@@ -52,8 +60,11 @@ public class UserController {
      * @return 无
      */
     @PostMapping("/logout")
-    public Result logout(){
-        // TODO 实现登出功能
+    public Result logout(HttpServletRequest request) {
+        String token = request.getHeader("authorization");
+        if (StrUtil.isNotBlank(token)) {
+            stringRedisTemplate.delete(LOGIN_USER_KEY + token);
+        }
         return Result.ok();
     }
 
@@ -113,13 +124,14 @@ public class UserController {
         }
 
         if (profile.getNickName() != null) {
-            user.setNickName(profile.getNickName());
+            String nick = profile.getNickName().trim();
+            if (nick.length() < 2 || nick.length() > 16) {
+                return Result.fail(StatusCode.PARAM_ERROR, "昵称长度需为 2~16 个字符");
+            }
+            user.setNickName(nick);
         }
         if (profile.getIcon() != null) {
             user.setIcon(profile.getIcon());
-        }
-        if (profile.getPassword() != null && !profile.getPassword().trim().isEmpty()) {
-            user.setPassword(profile.getPassword());
         }
         user.setUpdateTime(LocalDateTime.now());
         userService.updateById(user);
