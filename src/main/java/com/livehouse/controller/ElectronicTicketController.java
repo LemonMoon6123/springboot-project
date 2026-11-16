@@ -5,6 +5,7 @@ import com.livehouse.entity.StatusCode;
 import com.livehouse.dto.UserDTO;
 import com.livehouse.service.IElectronicTicketService;
 import com.livehouse.service.ITicketOrderService;
+import com.livehouse.service.app.VenueStaffService;
 import com.livehouse.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,9 @@ public class ElectronicTicketController {
 
     @Autowired
     private ITicketOrderService ticketOrderService;
+
+    @Autowired
+    private VenueStaffService venueStaffService;
 
     /**
      * 模拟支付接口
@@ -55,6 +59,13 @@ public class ElectronicTicketController {
         if (ticketCode == null || ticketCode.trim().isEmpty()) {
             return Result.fail(StatusCode.TICKET_CODE_EMPTY);
         }
+        UserDTO user = UserHolder.getUser();
+        if (user == null) {
+            return Result.fail(StatusCode.UNAUTHORIZED);
+        }
+        if (venueStaffService.listVenueIdsForStaff(user.getId()).isEmpty()) {
+            return Result.fail(StatusCode.VERIFY_NO_PERMISSION);
+        }
 
         ticketCode = ticketCode.trim();
         log.info("核销电子票请求，票号：{}", ticketCode);
@@ -66,6 +77,13 @@ public class ElectronicTicketController {
      */
     @PostMapping("/verify/{ticketCode}")
     public Result verifyTicketByPath(@PathVariable String ticketCode) {
+        UserDTO user = UserHolder.getUser();
+        if (user == null) {
+            return Result.fail(StatusCode.UNAUTHORIZED);
+        }
+        if (venueStaffService.listVenueIdsForStaff(user.getId()).isEmpty()) {
+            return Result.fail(StatusCode.VERIFY_NO_PERMISSION);
+        }
         log.info("核销电子票请求（Path），票号：{}", ticketCode);
         return electronicTicketService.verifyTicket(ticketCode);
     }

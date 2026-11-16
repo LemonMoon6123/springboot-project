@@ -50,4 +50,15 @@ public class CheckInRecord implements Serializable {
      * 核销时间
      */
     private LocalDateTime checkTime;
+
+    private String gate;
+
+    private String operatorName;
+
+    /** 1成功 0失败 */
+    private Integer result;
+
+    private String failReason;
+
+    private String clientIp;
 }

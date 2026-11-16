@@ -51,12 +51,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/venue/**",
                         "/upload/**",
                         "/uploads/**",  // 静态资源访问，不需要登录
-                        "/ticket/verify",       // 电子票核销（无路径参数形式）
-                        "/ticket/verify/**",    // 电子票核销（路径参数形式）
                         "/ticket/detail",       // 电子票详情（Query参数形式）
                         "/ticket/detail/**",
                         "/app/user/login/wx",
                         "/app/show/**",
+                        "/app/search",
+                        "/app/search/**",
                         "/app/pay/notify/wxpay"
                 ).order(1);
     }
