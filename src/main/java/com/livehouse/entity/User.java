@@ -48,6 +48,26 @@ public class User implements Serializable {
     private String icon;
 
     /**
+     * 账号状态：1正常 0封禁
+     */
+    private Integer status;
+
+    /**
+     * 微信小程序 openid
+     */
+    private String wxOpenid;
+
+    /**
+     * 微信 unionid
+     */
+    private String wxUnionid;
+
+    /**
+     * 最后登录时间
+     */
+    private LocalDateTime lastLoginTime;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createTime;

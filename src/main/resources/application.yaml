@@ -50,6 +50,10 @@ spring:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
 mybatis-plus:
   type-aliases-package: com.livehouse.entity # 别名扫描包
+  global-config:
+    db-config:
+      logic-delete-value: 1
+      logic-not-delete-value: 0
 logging:
   level:
     com.livehouse: debug

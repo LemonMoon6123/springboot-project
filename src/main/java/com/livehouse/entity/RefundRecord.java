@@ -26,9 +26,13 @@ public class RefundRecord implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    public static final int STATUS_PENDING = 0; // 处理中（已受理，库存尚未回补）
-    public static final int STATUS_SUCCESS = 1; // 已完成（库存已回补）
-    public static final int STATUS_FAILED = 2;  // 处理失败（等待定时任务重试）
+    /**
+     * 处理状态（以 DDL tb_refund_record.status 为准：0处理中 1已完成 2失败待重试；
+     * 规格书部分接口文案为 1/2/3，Service 层做映射）
+     */
+    public static final int STATUS_PENDING = 0;
+    public static final int STATUS_SUCCESS = 1;
+    public static final int STATUS_FAILED = 2;
 
     /**
      * 退票记录ID
@@ -85,4 +89,9 @@ public class RefundRecord implements Serializable {
      * 完成时间
      */
     private LocalDateTime finishTime;
+
+    /**
+     * 微信退款单号
+     */
+    private String channelRefundNo;
 }

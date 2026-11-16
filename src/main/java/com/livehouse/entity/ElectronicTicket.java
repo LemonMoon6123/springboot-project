@@ -47,9 +47,29 @@ public class ElectronicTicket implements Serializable {
     private Long ticketTypeId;
 
     /**
-     * 核销码
+     * 核销码（AES 加密）
      */
     private String verifyCode;
+
+    /**
+     * 展示码，如「8421 0093 7712」
+     */
+    private String displayCode;
+
+    /**
+     * 6 位数字入场码（现场手输兜底）
+     */
+    private String shortCode;
+
+    private Long audienceId;
+
+    private String audienceName;
+
+    private String audienceIdCardMask;
+
+    private String gate;
+
+    private String seatInfo;
 
     /**
      * 核销状态：0未核销 1已核销 2已作废（退票）

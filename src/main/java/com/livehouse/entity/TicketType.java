@@ -68,6 +68,31 @@ public class TicketType implements Serializable {
     private Integer limitPerUser;
 
     /**
+     * 票档说明
+     */
+    private String description;
+
+    /**
+     * 每单最多购买数
+     */
+    private Integer perOrderLimit;
+
+    /**
+     * 已售数量
+     */
+    private Integer soldCount;
+
+    /**
+     * 排序，越小越前
+     */
+    private Integer sortNo;
+
+    /**
+     * 1上架 0下架
+     */
+    private Integer status;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createTime;
