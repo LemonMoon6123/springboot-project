@@ -66,6 +66,12 @@ public class OrderTimeoutConsumer {
                 return;
             }
 
+            if (order.getExpireTime() != null && order.getExpireTime().isAfter(LocalDateTime.now())) {
+                log.info("未到支付截止时间 expire_time={}，跳过过早超时消息，订单ID：{}",
+                        order.getExpireTime(), message.getOrderId());
+                return;
+            }
+
             // CAS 取消：与定时任务互斥，避免两边各归还一次库存
             boolean cancelled = ticketOrderService.update()
                     .set("orderStatus", 3)
