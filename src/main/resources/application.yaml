@@ -53,6 +53,7 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
   type-aliases-package: com.livehouse.entity # 别名扫描包
   global-config:
     db-config:
