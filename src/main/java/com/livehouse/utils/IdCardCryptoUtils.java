@@ -39,8 +39,8 @@ public class IdCardCryptoUtils {
             return "****";
         }
         int len = plain.length();
-        int keepHead = Math.min(4, len - 4);
-        int keepTail = Math.min(4, len - keepHead);
+        int keepHead = 4;
+        int keepTail = 4;
         return plain.substring(0, keepHead) + "********" + plain.substring(len - keepTail);
     }
 
