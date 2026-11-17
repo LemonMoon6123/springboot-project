@@ -207,7 +207,7 @@ public class AppOrderServiceImpl implements AppOrderService {
     private Map<String, Object> buildCreateResponse(TicketOrder order) {
         long remain = 0;
         if (order.getExpireTime() != null) {
-            remain = Math.max(0, ChronoUnit.SECONDS.between(LocalDateTime.now(), order.getExpireTime()));
+            remain = Math.max(0, ChronoUnit.SECONDS.between(LocalDateTime.now(), order.getExpireTime())); // 0 做兜底，jdk8 时间API
         }
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("orderId", String.valueOf(order.getId()));
@@ -357,7 +357,7 @@ public class AppOrderServiceImpl implements AppOrderService {
         electronicTicketMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<ElectronicTicket>()
                 .eq(ElectronicTicket::getOrderId, orderId)
                 .eq(ElectronicTicket::getVerifyStatus, 0)
-                .set(ElectronicTicket::getVerifyStatus, 2));
+                .set(ElectronicTicket::getVerifyStatus, 2)); // 已作废（退票）
 
         ticketTypeService.update()
                 .setSql("left_stock = left_stock + " + order.getQuantity())
@@ -366,6 +366,7 @@ public class AppOrderServiceImpl implements AppOrderService {
         seckillScriptExecutor.executeRestoreStock(order.getTicketTypeId(), userId, order.getQuantity());
         stringRedisTemplate.delete("user:order:status:" + userId + ":" + order.getTicketTypeId());
 
+        // 记录退票信息
         RefundRecord record = new RefundRecord();
         record.setId(redisIDGenerator.getId("refund_record"));
         record.setOrderId(orderId);
@@ -625,9 +626,11 @@ public class AppOrderServiceImpl implements AppOrderService {
             return refund;
         }
         if (show != null && show.getStartTime() != null) {
-            long days = ChronoUnit.DAYS.between(LocalDateTime.now(), show.getStartTime());
-            refund.put("daysBeforeStart", days);
-            if (days < livehouseProperties.getOrder().getRefundDeadlineDays()) {
+            // 1. 算出退票截止的时间点：演出时间 - 7天
+            LocalDateTime refundDeadline = show.getStartTime().minusDays(livehouseProperties.getOrder().getRefundDeadlineDays());
+
+            // 2. 如果当前时间已经超过了这个截止点，直接拦截
+            if (LocalDateTime.now().isAfter(refundDeadline)) {
                 refund.put("canRefund", false);
                 refund.put("blockReason", "距开演不足 " + livehouseProperties.getOrder().getRefundDeadlineDays() + " 天，不支持退票");
                 refund.put("blockStatusCode", StatusCode.REFUND_WINDOW_CLOSED);
