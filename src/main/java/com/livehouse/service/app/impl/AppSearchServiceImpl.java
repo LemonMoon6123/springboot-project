@@ -36,6 +36,7 @@ public class AppSearchServiceImpl implements AppSearchService {
         if (sort == null || sort.isEmpty()) {
             sort = "hot";
         }
+        // 根据time字段设置起止时间。
         LocalDateTime timeStart = null;
         LocalDateTime timeEnd = null;
         if (time != null && !time.isEmpty()) {
@@ -55,22 +56,23 @@ public class AppSearchServiceImpl implements AppSearchService {
                     timeEnd = today.withDayOfMonth(1).plusMonths(1).atStartOfDay();
                     break;
                 case "m1":
-                    timeStart = LocalDateTime.now();
-                    timeEnd = timeStart.plusMonths(1);
+                    timeStart = today.atStartOfDay();
+                    timeEnd = today.withDayOfMonth(1).atStartOfDay();
                     break;
                 case "m3":
-                    timeStart = LocalDateTime.now();
-                    timeEnd = timeStart.plusMonths(3);
+                    timeStart = today.atStartOfDay();
+                    timeEnd = today.withDayOfMonth(3).atStartOfDay();
                     break;
                 default:
                     break;
             }
         }
 
+        // 处理前端传过来的价格区间字段（100-500），提取出最小值和最大值。
         BigDecimal priceMin = null;
         BigDecimal priceMax = null;
         if (price != null && !price.isEmpty()) {
-            String band = price.split(",")[0].trim();
+            String band = price.split(",")[0].trim(); // 取第一个作为价格区间。
             String[] parts = band.split("-");
             if (parts.length >= 1 && !parts[0].isEmpty()) {
                 priceMin = new BigDecimal(parts[0]);
@@ -80,15 +82,22 @@ public class AppSearchServiceImpl implements AppSearchService {
             }
         }
 
+
+        // 统计搜索出的演出数量
         long showTotal = appSearchMapper.countSearchShows(keyword, city, artistId, timeStart, timeEnd,
                 priceMin, priceMax, hasTicket);
+        // 计算每页起始索引
         long offset = (long) (current - 1) * size;
         List<Map<String, Object>> showRows = appSearchMapper.selectSearchShows(
                 keyword, city, artistId, timeStart, timeEnd, priceMin, priceMax, hasTicket, sort, offset, size);
+        // 将查询结果做些简单处理
         List<Map<String, Object>> showRecords = showRows.stream().map(this::toShowRecord).collect(Collectors.toList());
 
+        // 查询模糊查询艺人信息条数
         long artistTotal = appSearchMapper.countSearchArtists(keyword);
+        // 模糊查询艺人信息
         List<Map<String, Object>> artistRows = appSearchMapper.selectSearchArtists(keyword, 0, 10);
+        //  登录了，有用户id，则可以查看自己关注的艺人列表
         Set<Long> followedArtists = userId == null ? Collections.emptySet() : favoriteIds(userId, "artist");
         List<Map<String, Object>> artistRecords = artistRows.stream().map(row -> {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -142,6 +151,7 @@ public class AppSearchServiceImpl implements AppSearchService {
         return favoriteMapper.selectList(new LambdaQueryWrapper<Favorite>()
                         .eq(Favorite::getUserId, userId)
                         .eq(Favorite::getTargetType, targetType))
+                // 只把 targetId 抽出来，即喜欢的艺人id
                 .stream().map(Favorite::getTargetId).collect(Collectors.toSet());
     }
 
@@ -155,6 +165,7 @@ public class AppSearchServiceImpl implements AppSearchService {
         return p;
     }
 
+    // 将搜索数据做类型转换、格式化、补充计算处理
     private Map<String, Object> toShowRecord(Map<String, Object> row) {
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("showId", String.valueOf(row.get("showId")));
@@ -165,7 +176,7 @@ public class AppSearchServiceImpl implements AppSearchService {
         r.put("posterTag", row.get("posterTag"));
         Object st = row.get("startTime");
         if (st instanceof LocalDateTime) {
-            r.put("startTime", ((LocalDateTime) st).format(DT));
+            r.put("startTime", ((LocalDateTime) st).format(DT)); // 处理下时间格式
         } else {
             r.put("startTime", st);
         }
