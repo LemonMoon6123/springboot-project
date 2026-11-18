@@ -139,11 +139,16 @@ public class AppShowServiceImpl implements AppShowService {
             throw new StatusCodeException(StatusCode.SHOW_OFF_SHELF);
         }
 
+        LocalDateTime now = LocalDateTime.now();
         List<Show> sessions = showService.lambdaQuery()
                 .eq(Show::getPerformanceId, performanceId)
-                .in(Show::getStatus, 2, 3)
+                .in(Show::getStatus, 1, 2, 3)
+                .gt(Show::getStartTime, now)
                 .orderByAsc(Show::getStartTime)
                 .list();
+        sessions = sessions.stream()
+                .filter(s -> sessionListable(s.getId(), s.getStatus(), now))
+                .collect(Collectors.toList());
         if (sessions.isEmpty()) {
             throw new StatusCodeException(StatusCode.SHOW_NOT_FOUND);
         }
@@ -208,6 +213,37 @@ public class AppShowServiceImpl implements AppShowService {
         }
         data.put("followed", followed);
         return data;
+    }
+
+    /**
+     *
+     * 至少一种 上架 票种（tb_ticket_type.status = 1）。
+     * 若场次是 待开票(1) 或 售罄(3) → 直接算可展示。
+     * 若是 售票中(2) → 至少要有一种上架票，且当前在开售窗内（inSaleWindow）。
+     * @param showId
+     * @param showStatus
+     * @param now
+     * @return
+     */
+    private boolean sessionListable(Long showId, Integer showStatus, LocalDateTime now) {
+        // 至少要有一个上架的票种
+        List<TicketType> listed = ticketTypeMapper.selectList(new LambdaQueryWrapper<TicketType>()
+                .eq(TicketType::getShowId, showId)
+                .eq(TicketType::getStatus, 1));
+        if (listed.isEmpty()) {
+            return false;
+        }
+        if (showStatus != null && (showStatus == 1 || showStatus == 3)) {
+            return true;
+        }
+        return listed.stream().anyMatch(t -> inSaleWindow(t, now));
+    }
+
+    private static boolean inSaleWindow(TicketType t, LocalDateTime now) {
+        return t.getSaleStartTime() != null
+                && !t.getSaleStartTime().isAfter(now)
+                && t.getSaleEndTime() != null
+                && !t.getSaleEndTime().isBefore(now);
     }
 
     private Map<String, Object> toRecord(Map<String, Object> row) {
