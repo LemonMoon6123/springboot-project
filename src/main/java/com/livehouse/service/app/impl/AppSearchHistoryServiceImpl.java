@@ -52,7 +52,7 @@ public class AppSearchHistoryServiceImpl implements AppSearchHistoryService {
         String k = key(userId);
         stringRedisTemplate.opsForList().remove(k, 0, w);
         stringRedisTemplate.opsForList().leftPush(k, w);
-        stringRedisTemplate.opsForList().trim(k, 0, MAX_SIZE - 1);
+        stringRedisTemplate.opsForList().trim(k, 0, MAX_SIZE - 1); // 每次只保留前20条历史数据
         stringRedisTemplate.expire(k, TTL_DAYS, TimeUnit.DAYS);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("records", list(userId));
