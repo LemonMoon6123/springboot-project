@@ -14,8 +14,10 @@ import com.livehouse.service.IMessageProducerService;
 import com.livehouse.service.IShowService;
 import com.livehouse.service.ITicketOrderService;
 import com.livehouse.service.ITicketTypeService;
+import com.livehouse.service.app.AppMessageService;
 import com.livehouse.service.app.AppOrderService;
 import com.livehouse.service.app.PriceCalculator;
+import com.livehouse.service.app.credit.MemberLevelService;
 import com.livehouse.utils.RedisConstants;
 import com.livehouse.utils.RedisIDGenerator;
 import com.livehouse.utils.SeckillScriptExecutor;
@@ -58,7 +60,11 @@ public class AppOrderServiceImpl implements AppOrderService {
     @Resource
     private MemberLevelMapper memberLevelMapper;
     @Resource
+    private MemberLevelService memberLevelService;
+    @Resource
     private PriceCalculator priceCalculator;
+    @Resource
+    private AppMessageService appMessageService;
     @Resource
     private LivehouseProperties livehouseProperties;
     @Resource
@@ -379,6 +385,8 @@ public class AppOrderServiceImpl implements AppOrderService {
         record.setReason(reason);
         record.setCreateTime(LocalDateTime.now());
         refundRecordMapper.insert(record);
+        appMessageService.insertMessage(userId, "order", "退票已受理",
+                "退票申请已提交，退款将原路退回。", "refund", String.valueOf(orderId));
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("refundId", String.valueOf(record.getId()));
@@ -421,9 +429,22 @@ public class AppOrderServiceImpl implements AppOrderService {
         ctx.ticketType = ticketType;
 
         LocalDateTime now = LocalDateTime.now();
-        if (ticketType.getSaleStartTime() != null && ticketType.getSaleStartTime().isAfter(now)) {
-            ctx.blockReason = "未到开售时间";
-            if (throwOnBlock) throw new StatusCodeException(StatusCode.SALE_NOT_STARTED);
+        MemberLevel memberLevelForPriority = memberLevelService.resolveMemberLevel(userId);
+        int priorityMinutes = memberLevelForPriority.getPriorityMinutes() == null ? 0
+                : memberLevelForPriority.getPriorityMinutes();
+        if (ticketType.getSaleStartTime() != null) {
+            LocalDateTime earliest = ticketType.getSaleStartTime().minusMinutes(priorityMinutes);
+            if (now.isBefore(earliest)) {
+                if (priorityMinutes > 0) {
+                    ctx.blockReason = "会员可提前购票，当前未到你的开售时间";
+                    if (throwOnBlock) throw new StatusCodeException(StatusCode.PRIORITY_NOT_REACHED);
+                } else {
+                    ctx.blockReason = "未到开售时间";
+                    if (throwOnBlock) throw new StatusCodeException(StatusCode.SALE_NOT_STARTED);
+                }
+            } else if (now.isBefore(ticketType.getSaleStartTime())) {
+                // 优先购窗口内，允许继续
+            }
         }
         if (ticketType.getSaleEndTime() != null && ticketType.getSaleEndTime().isBefore(now)) {
             ctx.blockReason = "已停止售票";
@@ -456,7 +477,7 @@ public class AppOrderServiceImpl implements AppOrderService {
             }
             if (realName == 1) {
                 for (Audience a : audiences) {
-                    if (a.getAuthStatus() == null || a.getAuthStatus() != 1) {
+                    if (a.getAuthStatus() == null || (a.getAuthStatus() != 1 && a.getAuthStatus() != 2)) {
                         ctx.blockReason = "观演人未完成实名认证";
                         if (throwOnBlock) {
                             throw new StatusCodeException(StatusCode.AUDIENCE_NOT_AUTHENTICATED);
@@ -474,9 +495,7 @@ public class AppOrderServiceImpl implements AppOrderService {
             return m;
         }).collect(Collectors.toList());
 
-        UserInfo userInfo = userInfoMapper.selectById(userId);
-        int level = userInfo == null || userInfo.getLevel() == null ? 0 : userInfo.getLevel();
-        MemberLevel memberLevel = memberLevelMapper.selectById(level);
+        MemberLevel memberLevel = memberLevelService.resolveMemberLevel(userId);
         ctx.price = priceCalculator.calculate(ticketType.getPrice(), quantity, memberLevel);
         return ctx;
     }

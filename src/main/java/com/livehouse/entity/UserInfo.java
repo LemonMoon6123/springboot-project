@@ -63,6 +63,11 @@ public class UserInfo implements Serializable {
     private Integer credits;
 
     /**
+     * 累计观演场次（核销后递增）
+     */
+    private Integer watchCount;
+
+    /**
      * 会员级别，0~9级,0代表未开通会员
      */
     private Integer level;

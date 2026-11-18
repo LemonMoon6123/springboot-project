@@ -45,15 +45,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             return Result.fail(StatusCode.PHONE_FORMAT_ERROR);
         }
         
-        // 3.符合，生成验证码（联调可配置固定码，见 livehouse.sms.fixed-login-code）
+        // 3. 生成验证码（可选 livehouse.sms.fixed-login-code，否则随机 6 位）
         String fixed = livehouseProperties.getSms() == null ? null : livehouseProperties.getSms().getFixedLoginCode();
         String code = (fixed != null && !fixed.isEmpty()) ? fixed : RandomUtil.randomNumbers(6);
-        
-        // 4.保存验证码到
+
+        // 4. 写入 Redis，登录时比对（与黑马点评一致，未接真实短信时看本行日志）
         stringRedisTemplate.opsForValue().set(LOGIN_CODE_KEY + phone, code, LOGIN_CODE_TTL, TimeUnit.MINUTES);
 
-        // 5.发送验证码
-        log.debug("发送短信验证码成功，验证码：{}", code);
+        log.info("短信验证码已写入 Redis key={}{}，TTL={}min，code={}（未接短信网关时本地联调用此码登录）",
+                LOGIN_CODE_KEY, phone, LOGIN_CODE_TTL, code);
 
         // 返回ok
         return Result.ok();

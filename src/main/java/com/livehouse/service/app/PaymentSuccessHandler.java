@@ -9,6 +9,7 @@ import com.livehouse.entity.StatusCode;
 import com.livehouse.mapper.OrderAudienceMapper;
 import com.livehouse.service.IShowService;
 import com.livehouse.service.ITicketOrderService;
+import com.livehouse.service.app.AppMessageService;
 import com.livehouse.utils.RedisIDGenerator;
 import com.livehouse.utils.TicketEncryptionUtils;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -49,6 +50,9 @@ public class PaymentSuccessHandler extends ServiceImpl<ElectronicTicketMapper, E
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
+    @Autowired
+    private AppMessageService appMessageService;
+
     @Transactional
     public void handlePaymentSuccess(Long orderId) {
         TicketOrder order = ticketOrderService.getById(orderId);
@@ -76,6 +80,8 @@ public class PaymentSuccessHandler extends ServiceImpl<ElectronicTicketMapper, E
         stringRedisTemplate.delete(userOrderStatusKey);
 
         generateTickets(order);
+        appMessageService.insertMessage(order.getUserId(), "order", "订单支付成功",
+                "你的订单已支付成功，电子票已发放至票夹。", "order", String.valueOf(order.getId()));
     }
 
     private void generateTickets(TicketOrder order) {
@@ -131,6 +137,7 @@ public class PaymentSuccessHandler extends ServiceImpl<ElectronicTicketMapper, E
         saveBatch(tickets);
     }
 
+    // 随即碰撞20次生成固定6位随机数
     private String generateUniqueShortCode(Long showId) {
         for (int attempt = 0; attempt < 20; attempt++) {
             String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1_000_000));
@@ -140,9 +147,10 @@ public class PaymentSuccessHandler extends ServiceImpl<ElectronicTicketMapper, E
             }
         }
         long id = redisIDGenerator.getId("short_code");
-        return String.format("%06d", id % 1_000_000);
+        return String.format("%06d", id % 1_000_000); // 兜底处理，取后六位
     }
 
+    // 取ID生成器后12位作为电子票展示码
     private static String formatDisplayCode(long ticketId) {
         String digits = String.format("%012d", Math.abs(ticketId % 1_000_000_000_000L));
         return digits.substring(0, 4) + " " + digits.substring(4, 8) + " " + digits.substring(8, 12);

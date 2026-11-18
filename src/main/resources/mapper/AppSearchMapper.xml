@@ -36,9 +36,14 @@
             AND COALESCE(s.min_price, p.min_price) &lt;= #{priceMax}
         </if>
         <if test="hasTicket != null and hasTicket == 1">
+            AND s.status = 2
             AND EXISTS (
                 SELECT 1 FROM tb_ticket_type tt
-                WHERE tt.show_id = s.id AND tt.status = 1 AND tt.left_stock &gt; 0
+                WHERE tt.show_id = s.id
+                  AND tt.status = 1
+                  AND tt.left_stock &gt; 0
+                  AND (tt.sale_start_time IS NULL OR tt.sale_start_time &lt;= NOW())
+                  AND (tt.sale_end_time IS NULL OR tt.sale_end_time &gt;= NOW())
             )
         </if>
     </sql>

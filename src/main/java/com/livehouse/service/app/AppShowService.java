@@ -9,5 +9,5 @@ public interface AppShowService {
     Map<String, Object> list(String city, String type, String date, String sort,
                                Long venueId, Long artistId, int current, int size);
 
-    Map<String, Object> detail(Long performanceId, Long showId, boolean noticesAll);
+    Map<String, Object> detail(Long performanceId, Long showId, boolean noticesAll, Long userId);
 }

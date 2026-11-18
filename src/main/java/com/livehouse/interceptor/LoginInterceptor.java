@@ -14,8 +14,13 @@ public class LoginInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 校验ThreadLocal中是否存有用户信息
-        if(UserHolder.getUser() == null){
+        if ("GET".equalsIgnoreCase(request.getMethod())) {
+            String uri = request.getRequestURI();
+            if (uri.matches(".*/app/show/\\d+/comments") || "/app/points/shop".equals(uri)) {
+                return true;
+            }
+        }
+        if (UserHolder.getUser() == null) {
             response.setStatus(401);
             return false;
         }

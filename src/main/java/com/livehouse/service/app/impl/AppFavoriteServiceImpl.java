@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.livehouse.entity.*;
 import com.livehouse.exception.StatusCodeException;
 import com.livehouse.mapper.*;
+import com.livehouse.service.app.AppCommentService;
 import com.livehouse.service.app.AppFavoriteService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,9 +33,12 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
     private ElectronicTicketMapper electronicTicketMapper;
     @Resource
     private ShowMapper showMapper;
+    @Resource
+    private AppCommentService appCommentService;
 
     @Override
     @Transactional
+    // 返回“followed: true”的Map
     public Map<String, Object> add(Long userId, String targetType, Long targetId) {
         if (targetType == null || targetId == null) {
             throw new StatusCodeException(StatusCode.PARAM_ERROR);
@@ -47,9 +51,7 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
                 .eq(Favorite::getTargetType, type)
                 .eq(Favorite::getTargetId, targetId));
         if (existing != null) {
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("followed", true);
-            return data;
+            return favoriteResult(type, targetId, true);
         }
 
         Favorite fav = new Favorite();
@@ -59,9 +61,11 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
         fav.setCreateTime(LocalDateTime.now());
         favoriteMapper.insert(fav);
 
+        // 同时增加热度值
         if ("show".equals(type)) {
             performanceMapper.update(null, new LambdaUpdateWrapper<Performance>()
                     .eq(Performance::getId, targetId)
+                    // 防止 want_count 是 NULL, NULL + 1 结果还是 NULL的情况。
                     .setSql("want_count = IFNULL(want_count,0) + 1"));
         } else if ("artist".equals(type)) {
             artistMapper.update(null, new LambdaUpdateWrapper<Artist>()
@@ -69,13 +73,12 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
                     .setSql("follow_count = IFNULL(follow_count,0) + 1"));
         }
 
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("followed", true);
-        return data;
+        return favoriteResult(type, targetId, true);
     }
 
     @Override
     @Transactional
+    // 返回followed: false的Map
     public Map<String, Object> remove(Long userId, String targetType, Long targetId) {
         if (targetType == null || targetId == null) {
             throw new StatusCodeException(StatusCode.PARAM_ERROR);
@@ -86,9 +89,7 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
                 .eq(Favorite::getTargetType, type)
                 .eq(Favorite::getTargetId, targetId));
         if (existing == null) {
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("followed", false);
-            return data;
+            return favoriteResult(type, targetId, false);
         }
         favoriteMapper.deleteById(existing.getId());
 
@@ -104,8 +105,18 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
                     .setSql("follow_count = follow_count - 1"));
         }
 
+        return favoriteResult(type, targetId, false);
+    }
+
+    private Map<String, Object> favoriteResult(String type, Long targetId, boolean followed) {
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("followed", false);
+        data.put("followed", followed);
+        if ("show".equals(type)) {
+            Performance p = performanceMapper.selectById(targetId);
+            if (p != null) {
+                data.put("wantCount", p.getWantCount() == null ? 0 : p.getWantCount());
+            }
+        }
         return data;
     }
 
@@ -182,6 +193,7 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("targetType", "show");
             m.put("targetId", String.valueOf(f.getTargetId()));
+            m.put("performanceId", String.valueOf(f.getTargetId()));
             m.put("title", p.getTitle());
             m.put("cover", p.getPoster());
             m.put("wantCount", p.getWantCount());
@@ -193,6 +205,7 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
         return out;
     }
 
+    //  根据Favorite表中的TargetType定位具体数据并读取
     private List<Map<String, Object>> listByType(Long userId, String targetType) {
         List<Favorite> favs = favoriteMapper.selectList(new LambdaQueryWrapper<Favorite>()
                 .eq(Favorite::getUserId, userId)
@@ -220,11 +233,12 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
         }).collect(Collectors.toList());
     }
 
+    // 看过的演出 -> 电子票已经核销过。
     private List<Map<String, Object>> buildSeenList(Long userId) {
         List<ElectronicTicket> tickets = electronicTicketMapper.selectList(new LambdaQueryWrapper<ElectronicTicket>()
                 .eq(ElectronicTicket::getUserId, userId)
                 .eq(ElectronicTicket::getVerifyStatus, 1));
-        Map<Long, Map<String, Object>> byPerf = new LinkedHashMap<>();
+        Map<Long, Map<String, Object>> byPerf = new LinkedHashMap<>(); // 存放演出对应信息
         for (ElectronicTicket t : tickets) {
             Show show = showMapper.selectById(t.getShowId());
             if (show == null || show.getPerformanceId() == null) {
@@ -244,8 +258,9 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
             m.put("title", p.getTitle());
             m.put("cover", p.getPoster());
             m.put("verifyTime", t.getVerifyTime() == null ? null : t.getVerifyTime().format(DT));
-            m.put("canComment", true);
-            m.put("note", "可写观演笔记");
+            boolean canComment = t.getOrderId() != null && !appCommentService.hasCommentForOrder(t.getOrderId());
+            m.put("canComment", canComment);
+            m.put("note", canComment ? "可写观演笔记" : "已观演");
             byPerf.put(perfId, m);
         }
         return new ArrayList<>(byPerf.values());

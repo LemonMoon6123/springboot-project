@@ -30,6 +30,13 @@ public class IdCardCryptoUtils {
         return aes.encryptBase64(plain);
     }
 
+    public String decrypt(String cipher) {
+        if (StrUtil.isBlank(cipher)) {
+            return null;
+        }
+        return aes.decryptStr(cipher);
+    }
+
     public String hash(String plain) {
         return DigestUtil.sha256Hex(plain);
     }

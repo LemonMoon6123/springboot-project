@@ -36,6 +36,9 @@ public class AppSearchServiceImpl implements AppSearchService {
         if (sort == null || sort.isEmpty()) {
             sort = "hot";
         }
+        if ("new".equals(sort)) {
+            sort = "update";
+        }
         // 根据time字段设置起止时间。
         LocalDateTime timeStart = null;
         LocalDateTime timeEnd = null;
@@ -57,30 +60,41 @@ public class AppSearchServiceImpl implements AppSearchService {
                     break;
                 case "m1":
                     timeStart = today.atStartOfDay();
-                    timeEnd = today.withDayOfMonth(1).atStartOfDay();
+                    timeEnd = today.plusMonths(1).atStartOfDay();
                     break;
                 case "m3":
                     timeStart = today.atStartOfDay();
-                    timeEnd = today.withDayOfMonth(3).atStartOfDay();
+                    timeEnd = today.plusMonths(3).atStartOfDay();
+                    break;
+                case "本周末":
+                    LocalDate satZh = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
+                    timeStart = satZh.atStartOfDay();
+                    timeEnd = satZh.plusDays(2).atStartOfDay();
+                    break;
+                case "今天":
+                    timeStart = today.atStartOfDay();
+                    timeEnd = today.plusDays(1).atStartOfDay();
+                    break;
+                case "本月":
+                    timeStart = today.withDayOfMonth(1).atStartOfDay();
+                    timeEnd = today.withDayOfMonth(1).plusMonths(1).atStartOfDay();
+                    break;
+                case "一个月内":
+                    timeStart = today.atStartOfDay();
+                    timeEnd = today.plusMonths(1).atStartOfDay();
+                    break;
+                case "三个月内":
+                    timeStart = today.atStartOfDay();
+                    timeEnd = today.plusMonths(3).atStartOfDay();
                     break;
                 default:
                     break;
             }
         }
 
-        // 处理前端传过来的价格区间字段（100-500），提取出最小值和最大值。
-        BigDecimal priceMin = null;
-        BigDecimal priceMax = null;
-        if (price != null && !price.isEmpty()) {
-            String band = price.split(",")[0].trim(); // 取第一个作为价格区间。
-            String[] parts = band.split("-");
-            if (parts.length >= 1 && !parts[0].isEmpty()) {
-                priceMin = new BigDecimal(parts[0]);
-            }
-            if (parts.length >= 2 && !parts[1].isEmpty()) {
-                priceMax = new BigDecimal(parts[1]);
-            }
-        }
+        BigDecimal[] band = parsePriceBand(price);
+        BigDecimal priceMin = band[0];
+        BigDecimal priceMax = band[1];
 
 
         // 统计搜索出的演出数量
@@ -97,7 +111,7 @@ public class AppSearchServiceImpl implements AppSearchService {
         long artistTotal = appSearchMapper.countSearchArtists(keyword);
         // 模糊查询艺人信息
         List<Map<String, Object>> artistRows = appSearchMapper.selectSearchArtists(keyword, 0, 10);
-        //  登录了，有用户id，则可以查看自己关注的艺人列表
+        List<Map<String, Object>> pickerRows = appSearchMapper.selectSearchArtists(null, 0, 80);
         Set<Long> followedArtists = userId == null ? Collections.emptySet() : favoriteIds(userId, "artist");
         List<Map<String, Object>> artistRecords = artistRows.stream().map(row -> {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -109,6 +123,13 @@ public class AppSearchServiceImpl implements AppSearchService {
             String acity = row.get("city") == null ? "" : row.get("city").toString();
             m.put("desc", type + " · " + acity);
             m.put("followed", followedArtists.contains(id));
+            return m;
+        }).collect(Collectors.toList());
+        List<Map<String, Object>> artistPicker = pickerRows.stream().map(row -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            Long id = ((Number) row.get("id")).longValue();
+            m.put("id", String.valueOf(id));
+            m.put("name", row.get("name"));
             return m;
         }).collect(Collectors.toList());
 
@@ -138,6 +159,7 @@ public class AppSearchServiceImpl implements AppSearchService {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("shows", page(showRecords, showTotal, current, size));
         data.put("artists", page(artistRecords, artistTotal, 1, artistRecords.size()));
+        data.put("artistPicker", artistPicker);
         data.put("venues", page(venueRecords, venueTotal, 1, venueRecords.size()));
         Map<String, Object> wantRank = new LinkedHashMap<>();
         wantRank.put("title", "Livehouse 想看榜");
@@ -145,6 +167,41 @@ public class AppSearchServiceImpl implements AppSearchService {
         data.put("wantRank", wantRank);
         data.put("keyword", keyword == null ? "" : keyword);
         return data;
+    }
+
+  /** 解析前端价格筛选项（如「100 以内」「100~300」） */
+    private static BigDecimal[] parsePriceBand(String price) {
+        if (price == null || price.isEmpty()) {
+            return new BigDecimal[]{null, null};
+        }
+        String band = price.split(",")[0].trim();
+        switch (band) {
+            case "100 以内":
+                return new BigDecimal[]{null, new BigDecimal("100")};
+            case "100~300":
+                return new BigDecimal[]{new BigDecimal("100"), new BigDecimal("300")};
+            case "300~500":
+                return new BigDecimal[]{new BigDecimal("300"), new BigDecimal("500")};
+            case "500 以上":
+                return new BigDecimal[]{new BigDecimal("500"), null};
+            default:
+                break;
+        }
+        String normalized = band.replace('~', '-').replaceAll("[^0-9\\-.]", "");
+        String[] parts = normalized.split("-");
+        BigDecimal min = null;
+        BigDecimal max = null;
+        try {
+            if (parts.length >= 1 && !parts[0].isEmpty()) {
+                min = new BigDecimal(parts[0]);
+            }
+            if (parts.length >= 2 && !parts[1].isEmpty()) {
+                max = new BigDecimal(parts[1]);
+            }
+        } catch (NumberFormatException ignored) {
+            return new BigDecimal[]{null, null};
+        }
+        return new BigDecimal[]{min, max};
     }
 
     private Set<Long> favoriteIds(Long userId, String targetType) {
@@ -175,10 +232,13 @@ public class AppSearchServiceImpl implements AppSearchService {
         r.put("cover", row.get("cover"));
         r.put("posterTag", row.get("posterTag"));
         Object st = row.get("startTime");
-        if (st instanceof LocalDateTime) {
-            r.put("startTime", ((LocalDateTime) st).format(DT)); // 处理下时间格式
+        LocalDateTime start = st instanceof LocalDateTime ? (LocalDateTime) st : null;
+        if (start != null) {
+            r.put("startTime", start.format(DT));
+            r.put("showTimeText", formatShowText(start));
         } else {
             r.put("startTime", st);
+            r.put("showTimeText", st == null ? "" : st.toString());
         }
         r.put("venueName", row.get("venueName"));
         r.put("city", row.get("city"));
@@ -193,5 +253,16 @@ public class AppSearchServiceImpl implements AppSearchService {
         String tag = row.get("posterTag") == null ? null : row.get("posterTag").toString();
         r.put("cardType", tag != null && !tag.isEmpty() ? "big" : "small");
         return r;
+    }
+
+    private static String formatShowText(LocalDateTime t) {
+        if (t == null) {
+            return "";
+        }
+        try {
+            return t.format(java.time.format.DateTimeFormatter.ofPattern("M月d日 EEEE HH:mm", Locale.CHINA));
+        } catch (Exception e) {
+            return t.format(java.time.format.DateTimeFormatter.ofPattern("M月d日 HH:mm"));
+        }
     }
 }

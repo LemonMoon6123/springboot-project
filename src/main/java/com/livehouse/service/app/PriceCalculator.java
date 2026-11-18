@@ -22,22 +22,27 @@ public class PriceCalculator {
 
     public PriceBreakdown calculate(BigDecimal unitPrice, int quantity, MemberLevel memberLevel) {
         BigDecimal totalAmount = unitPrice.multiply(BigDecimal.valueOf(quantity))
-                .setScale(2, RoundingMode.HALF_UP);
+                .setScale(2, RoundingMode.HALF_UP); // 四舍五入
         BigDecimal serviceFee = livehouseProperties.getOrder().getServiceFeePerTicket()
                 .multiply(BigDecimal.valueOf(quantity))
                 .setScale(2, RoundingMode.HALF_UP);
 
+        // 先按普通用户走
         BigDecimal rate = BigDecimal.ONE;
         Integer level = 0;
         String levelName = "普通";
+        //如果存在会员等级，再按会员走
         if (memberLevel != null && memberLevel.getDiscountRate() != null) {
             rate = memberLevel.getDiscountRate();
             level = memberLevel.getLevel();
             levelName = memberLevel.getName();
         }
 
+        // 计算总金额
         BigDecimal beforeDiscount = totalAmount.add(serviceFee);
+        // 计算实付金额
         BigDecimal payAmount = beforeDiscount.multiply(rate).setScale(2, RoundingMode.HALF_UP);
+        // 计算优惠金额
         BigDecimal memberDiscountAmount = beforeDiscount.subtract(payAmount).setScale(2, RoundingMode.HALF_UP);
 
         PriceBreakdown breakdown = new PriceBreakdown();

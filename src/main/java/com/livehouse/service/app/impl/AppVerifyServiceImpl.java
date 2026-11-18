@@ -13,6 +13,7 @@ import com.livehouse.service.ITicketTypeService;
 import com.livehouse.service.IUserService;
 import com.livehouse.service.app.AppVerifyService;
 import com.livehouse.service.app.VenueStaffService;
+import com.livehouse.service.app.credit.CreditAccountService;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +49,8 @@ public class AppVerifyServiceImpl implements AppVerifyService {
     private IUserService userService;
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+    @Resource
+    private CreditAccountService creditAccountService;
 
     @Override
     public List<Map<String, Object>> sessions(Long userId) {
@@ -153,6 +156,7 @@ public class AppVerifyServiceImpl implements AppVerifyService {
         record.setResult(1);
         record.setCheckTime(now);
         checkInRecordService.save(record);
+        creditAccountService.grantPendingAfterVerify(ticket.getId());
 
         if (ticketCode != null && !ticketCode.isEmpty()) {
             stringRedisTemplate.delete("ticket:present:" + ticketCode);

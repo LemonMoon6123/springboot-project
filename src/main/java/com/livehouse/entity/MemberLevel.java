@@ -14,6 +14,7 @@ import java.math.BigDecimal;
  * 会员等级配置
  */
 @Data
+// 只有当所有字段的值都完全一模一样时，它才会返回 true，并拒绝使用父类的字段值纳入比较范围。
 @EqualsAndHashCode(callSuper = false)
 @Accessors(chain = true)
 @TableName("tb_member_level")

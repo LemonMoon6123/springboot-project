@@ -2,6 +2,7 @@ package com.livehouse.controller.app;
 
 import com.livehouse.entity.Result;
 import com.livehouse.service.app.AppShowService;
+import com.livehouse.utils.UserHolder;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -39,6 +40,7 @@ public class AppShowController {
     public Result detail(@PathVariable Long performanceId,
                          @RequestParam(required = false) Long showId,
                          @RequestParam(required = false, defaultValue = "false") boolean noticesAll) {
-        return Result.ok(appShowService.detail(performanceId, showId, noticesAll));
+        Long userId = UserHolder.getUser() == null ? null : UserHolder.getUser().getId();
+        return Result.ok(appShowService.detail(performanceId, showId, noticesAll, userId));
     }
 }

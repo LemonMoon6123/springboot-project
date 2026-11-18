@@ -8,7 +8,9 @@ import com.livehouse.entity.OrderAudience;
 import com.livehouse.mapper.OrderAudienceMapper;
 import com.livehouse.exception.StatusCodeException;
 import com.livehouse.entity.StatusCode;
+import com.livehouse.entity.RealNameAuth;
 import com.livehouse.mapper.AudienceMapper;
+import com.livehouse.mapper.RealNameAuthMapper;
 import com.livehouse.service.app.AppAudienceService;
 import com.livehouse.utils.IdCardCryptoUtils;
 import com.livehouse.utils.RegexUtils;
@@ -33,6 +35,11 @@ public class AppAudienceServiceImpl implements AppAudienceService {
     private IdCardCryptoUtils idCardCryptoUtils;
     @Resource
     private OrderAudienceMapper orderAudienceMapper;
+    @Resource
+    private RealNameAuthMapper realNameAuthMapper;
+
+    /** 观演人证件已校验通过，与下单页 authStatus===2 对齐 */
+    private static final int AUDIENCE_AUTH_PASS = 2;
 
     @Override
     public Map<String, Object> list(Long userId) {
@@ -48,7 +55,9 @@ public class AppAudienceServiceImpl implements AppAudienceService {
             m.put("idCardMask", a.getIdCardMask());
             m.put("isDefault", Objects.equals(a.getIsDefault(), 1));
             m.put("authStatus", a.getAuthStatus());
+            m.put("authStatusText", audienceAuthText(a.getAuthStatus()));
             m.put("lastUsedTime", a.getLastUsedTime() == null ? null : a.getLastUsedTime().format(DT));
+            m.put("lastUsed", a.getLastUsedTime() == null ? null : a.getLastUsedTime().format(DT));
             m.put("canDelete", true);
             m.put("deleteBlockReason", null);
             return m;
@@ -62,12 +71,31 @@ public class AppAudienceServiceImpl implements AppAudienceService {
 
     @Override
     public Map<String, Object> create(Long userId, AudienceCreateRequest request) {
-        if (request == null || StrUtil.isBlank(request.getName()) || StrUtil.isBlank(request.getIdCard())) {
+        if (request == null || StrUtil.isBlank(request.getName())) {
             throw new StatusCodeException(StatusCode.PARAM_ERROR);
         }
+        String idCard = request.getIdCard() == null ? null : request.getIdCard().trim();
+        boolean useAccountRealName = Boolean.TRUE.equals(request.getUseAccountRealName());
+        if (useAccountRealName) {
+            RealNameAuth auth = realNameAuthMapper.selectOne(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<RealNameAuth>()
+                            .eq(RealNameAuth::getUserId, userId));
+            if (auth == null || auth.getAuthStatus() == null
+                    || auth.getAuthStatus() != RealNameAuth.STATUS_PASS
+                    || StrUtil.isBlank(auth.getIdCardEnc())) {
+                throw new StatusCodeException(StatusCode.REAL_NAME_REQUIRED, "请先完成账号实名认证后再一键添加");
+            }
+            idCard = idCardCryptoUtils.decrypt(auth.getIdCardEnc());
+            if (StrUtil.isBlank(request.getName())) {
+                request.setName(auth.getRealName());
+            }
+        }
+        if (StrUtil.isBlank(idCard)) {
+            throw new StatusCodeException(StatusCode.PARAM_ERROR, "请填写 18 位身份证号，或先完成实名认证后一键添加");
+        }
         if (request.getIdType() == null || request.getIdType() == 1) {
-            if (!RegexUtils.isIdCardValid(request.getIdCard())) {
-                throw new StatusCodeException(StatusCode.ID_CARD_INVALID);
+            if (!RegexUtils.isIdCardValid(idCard)) {
+                throw new StatusCodeException(StatusCode.ID_CARD_INVALID, "证件号格式不正确，请核对 18 位身份证号");
             }
         }
 
@@ -78,7 +106,7 @@ public class AppAudienceServiceImpl implements AppAudienceService {
             throw new StatusCodeException(StatusCode.AUDIENCE_LIMIT_EXCEEDED);
         }
 
-        String hash = idCardCryptoUtils.hash(request.getIdCard());
+        String hash = idCardCryptoUtils.hash(idCard);
         long dup = audienceMapper.selectCount(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Audience>()
                         .eq(Audience::getUserId, userId)
@@ -91,12 +119,12 @@ public class AppAudienceServiceImpl implements AppAudienceService {
         audience.setUserId(userId);
         audience.setName(request.getName().trim());
         audience.setIdType(request.getIdType() == null ? 1 : request.getIdType());
-        audience.setIdCardEnc(idCardCryptoUtils.encrypt(request.getIdCard()));
-        audience.setIdCardMask(idCardCryptoUtils.mask(request.getIdCard()));
+        audience.setIdCardEnc(idCardCryptoUtils.encrypt(idCard));
+        audience.setIdCardMask(idCardCryptoUtils.mask(idCard));
         audience.setIdCardHash(hash);
         audience.setPhone(request.getPhone());
         audience.setIsDefault(count == 0 ? 1 : 0);
-        audience.setAuthStatus(1);
+        audience.setAuthStatus(AUDIENCE_AUTH_PASS);
         audience.setCreateTime(LocalDateTime.now());
         audience.setUpdateTime(LocalDateTime.now());
         audienceMapper.insert(audience);
@@ -136,10 +164,20 @@ public class AppAudienceServiceImpl implements AppAudienceService {
         if (request.getPhone() != null) {
             audience.setPhone(request.getPhone());
         }
-        audience.setAuthStatus(1);
+        audience.setAuthStatus(AUDIENCE_AUTH_PASS);
         audience.setUpdateTime(LocalDateTime.now());
         audienceMapper.updateById(audience);
         return list(userId);
+    }
+
+    private static String audienceAuthText(Integer status) {
+        if (status == null || status == 0) {
+            return "未认证";
+        }
+        if (status == AUDIENCE_AUTH_PASS || status == 1) {
+            return "已认证";
+        }
+        return "未认证";
     }
 
     @Override

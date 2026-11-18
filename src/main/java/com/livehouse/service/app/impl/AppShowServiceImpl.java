@@ -8,7 +8,9 @@ import com.livehouse.entity.TicketType;
 import com.livehouse.entity.Venue;
 import com.livehouse.exception.StatusCodeException;
 import com.livehouse.entity.StatusCode;
+import com.livehouse.entity.Favorite;
 import com.livehouse.mapper.AppShowMapper;
+import com.livehouse.mapper.FavoriteMapper;
 import com.livehouse.mapper.NoticeMapper;
 import com.livehouse.mapper.PerformanceMapper;
 import com.livehouse.mapper.TicketTypeMapper;
@@ -42,6 +44,8 @@ public class AppShowServiceImpl implements AppShowService {
     private TicketTypeMapper ticketTypeMapper;
     @Resource
     private NoticeMapper noticeMapper;
+    @Resource
+    private FavoriteMapper favoriteMapper;
 
     @Override
     public Map<String, Object> home(String city, String type, int current, int size) {
@@ -129,7 +133,7 @@ public class AppShowServiceImpl implements AppShowService {
     }
 
     @Override
-    public Map<String, Object> detail(Long performanceId, Long showId, boolean noticesAll) {
+    public Map<String, Object> detail(Long performanceId, Long showId, boolean noticesAll, Long userId) {
         Performance performance = performanceMapper.selectById(performanceId);
         if (performance == null || performance.getStatus() == null || performance.getStatus() != 2) {
             throw new StatusCodeException(StatusCode.SHOW_OFF_SHELF);
@@ -199,6 +203,16 @@ public class AppShowServiceImpl implements AppShowService {
         data.put("ticketTypes", types.stream().map(this::toTicketType).collect(Collectors.toList()));
         data.put("notices", noticeList.stream().map(this::toNotice).collect(Collectors.toList()));
         data.put("noticesTotal", noticesTotal);
+        data.put("wantCount", performance.getWantCount() == null ? 0 : performance.getWantCount());
+        boolean followed = false;
+        if (userId != null) {
+            long favCount = favoriteMapper.selectCount(new LambdaQueryWrapper<Favorite>()
+                    .eq(Favorite::getUserId, userId)
+                    .eq(Favorite::getTargetType, "show")
+                    .eq(Favorite::getTargetId, performanceId));
+            followed = favCount > 0;
+        }
+        data.put("followed", followed);
         return data;
     }
 
