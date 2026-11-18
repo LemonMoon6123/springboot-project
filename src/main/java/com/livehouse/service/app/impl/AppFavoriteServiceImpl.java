@@ -71,6 +71,10 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
             artistMapper.update(null, new LambdaUpdateWrapper<Artist>()
                     .eq(Artist::getId, targetId)
                     .setSql("follow_count = IFNULL(follow_count,0) + 1"));
+        } else if ("venue".equals(type)) {
+            venueMapper.update(null, new LambdaUpdateWrapper<Venue>()
+                    .eq(Venue::getId, targetId)
+                    .setSql("follow_count = IFNULL(follow_count,0) + 1"));
         }
 
         return favoriteResult(type, targetId, true);
@@ -102,6 +106,11 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
             artistMapper.update(null, new LambdaUpdateWrapper<Artist>()
                     .eq(Artist::getId, targetId)
                     .ge(Artist::getFollowCount, 1)
+                    .setSql("follow_count = follow_count - 1"));
+        } else if ("venue".equals(type)) {
+            venueMapper.update(null, new LambdaUpdateWrapper<Venue>()
+                    .eq(Venue::getId, targetId)
+                    .ge(Venue::getFollowCount, 1)
                     .setSql("follow_count = follow_count - 1"));
         }
 
