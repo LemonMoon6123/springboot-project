@@ -3,30 +3,46 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.livehouse.mapper.AppShowMapper">
 
-    <!-- 默认：有上架票种即可展示（含售罄 left_stock=0）；有库存时再要求未过停售；开售时间可未到 -->
-    <sql id="listedTicketExists">
+    <!-- 场次可展示：演出未开始、项目已上架、场次非已结束；至少一个票种上架 -->
+    <sql id="atLeastOneListedTicket">
         AND EXISTS (
             SELECT 1 FROM tb_ticket_type tt
             WHERE tt.show_id = s.id
               AND tt.status = 1
-              AND (
-                IFNULL(tt.left_stock, 0) &lt;= 0
-                OR (
-                  tt.left_stock &gt; 0
-                  AND (tt.sale_end_time IS NULL OR tt.sale_end_time &gt;= NOW())
-                )
-              )
         )
+    </sql>
+
+    <!--
+      票种售卖侧：开售中（当前在开售时间段内），或场次处于待开票(1)/售罄(3)；
+      售票中(2) 由开售时间段内票种体现。
+    -->
+    <sql id="showSaleStateDisplayable">
+        AND (
+            s.status IN (1, 3)
+            OR EXISTS (
+                SELECT 1 FROM tb_ticket_type tt
+                WHERE tt.show_id = s.id
+                  AND tt.status = 1
+                  AND tt.sale_start_time &lt;= NOW()
+                  AND tt.sale_end_time &gt;= NOW()
+            )
+        )
+    </sql>
+
+    <sql id="showListableCore">
+        AND p.status = 2
+        AND s.status IN (1, 2, 3)
+        AND s.start_time &gt; NOW()
+        <include refid="atLeastOneListedTicket"/>
+        <include refid="showSaleStateDisplayable"/>
     </sql>
 
     <sql id="showListWhere">
         FROM tb_show s
         INNER JOIN tb_performance p ON p.id = s.performance_id
         INNER JOIN tb_venue v ON v.id = s.venue_id
-        WHERE p.status = 2
-          AND s.status IN (1, 2, 3)
-          AND (s.end_time IS NULL OR s.end_time &gt; NOW())
-        <include refid="listedTicketExists"/>
+        WHERE 1 = 1
+        <include refid="showListableCore"/>
         <if test="city != null and city != ''">
             AND v.city = #{city}
         </if>
