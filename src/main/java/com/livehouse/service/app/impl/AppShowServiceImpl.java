@@ -51,7 +51,7 @@ public class AppShowServiceImpl implements AppShowService {
     public Map<String, Object> home(String city, String type, int current, int size) {
         size = Math.min(Math.max(size, 1), 50);
         current = Math.max(current, 1);
-        Map<String, Object> data = list(city, type, null, "time", null, null, current, size);
+        Map<String, Object> data = list(city, type, null, "time", null, null, current, size, null);
 
         List<String> cityList = appShowMapper.selectDistinctCities();
         if (cityList.isEmpty()) {
@@ -87,7 +87,7 @@ public class AppShowServiceImpl implements AppShowService {
 
     @Override
     public Map<String, Object> list(String city, String type, String date, String sort,
-                                    Long venueId, Long artistId, int current, int size) {
+                                    Long venueId, Long artistId, int current, int size, Long userId) {
         size = Math.min(Math.max(size, 1), 50);
         current = Math.max(current, 1);
         if (sort == null || sort.isEmpty()) {
@@ -111,7 +111,7 @@ public class AppShowServiceImpl implements AppShowService {
         if (venueId != null) {
             Venue venue = venueMapper.selectById(venueId);
             if (venue != null) {
-                data.put("venue", buildVenueBrief(venue, (int) total));
+                data.put("venue", buildVenueBrief(venue, (int) total, userId));
             }
         }
         if (artistId != null) {
@@ -185,14 +185,8 @@ public class AppShowServiceImpl implements AppShowService {
         data.put("isRealName", performance.getIsRealName() == null ? 1 : performance.getIsRealName());
         data.put("limitTip", "实名制 · 每人限购 " + (types.isEmpty() ? 2 : types.get(0).getLimitPerUser()) + " 张");
         if (venue != null) {
-            Map<String, Object> v = new LinkedHashMap<>();
-            v.put("id", String.valueOf(venue.getId()));
-            v.put("name", venue.getName());
-            v.put("address", venue.getAddress());
-            v.put("city", venue.getCity());
-            v.put("longitude", venue.getLongitude());
-            v.put("latitude", venue.getLatitude());
-            data.put("venue", v);
+            long venueUpcoming = appShowMapper.countShowList(venue.getCity(), null, null, venue.getId(), null);
+            data.put("venue", buildVenueBrief(venue, (int) venueUpcoming, userId));
         }
         data.put("showTime", formatTime(current.getStartTime()));
         data.put("showTimeText", formatShowText(current.getStartTime()));
@@ -237,6 +231,7 @@ public class AppShowServiceImpl implements AppShowService {
         r.put("status", row.get("status"));
         r.put("statusText", "售票中");
         r.put("isRealName", row.get("isRealName"));
+        r.put("type", row.get("type"));
         String tag = row.get("posterTag") == null ? null : row.get("posterTag").toString();
         r.put("cardType", tag != null && !tag.isEmpty() ? "big" : "small");
         return r;
@@ -294,7 +289,7 @@ public class AppShowServiceImpl implements AppShowService {
         return m;
     }
 
-    private Map<String, Object> buildVenueBrief(Venue venue, int upcomingCount) {
+    private Map<String, Object> buildVenueBrief(Venue venue, int upcomingCount, Long userId) {
         Map<String, Object> v = new LinkedHashMap<>();
         v.put("id", String.valueOf(venue.getId()));
         v.put("name", venue.getName());
@@ -303,8 +298,17 @@ public class AppShowServiceImpl implements AppShowService {
         v.put("longitude", venue.getLongitude());
         v.put("latitude", venue.getLatitude());
         v.put("traffic", "");
-        v.put("tags", Collections.singletonList("官方入驻"));
-        v.put("followed", false);
+        v.put("tags", Arrays.asList("官方入驻", "站席观演"));
+        v.put("followCount", venue.getFollowCount() == null ? 0 : venue.getFollowCount());
+        boolean followed = false;
+        if (userId != null) {
+            long cnt = favoriteMapper.selectCount(new LambdaQueryWrapper<Favorite>()
+                    .eq(Favorite::getUserId, userId)
+                    .eq(Favorite::getTargetType, "venue")
+                    .eq(Favorite::getTargetId, venue.getId()));
+            followed = cnt > 0;
+        }
+        v.put("followed", followed);
         v.put("upcomingCount", upcomingCount);
         return v;
     }

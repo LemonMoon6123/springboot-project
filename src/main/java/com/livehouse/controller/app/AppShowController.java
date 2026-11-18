@@ -33,7 +33,8 @@ public class AppShowController {
                        @RequestParam(required = false) Long artistId,
                        @RequestParam(defaultValue = "1") int current,
                        @RequestParam(defaultValue = "10") int size) {
-        return Result.ok(appShowService.list(city, type, date, sort, venueId, artistId, current, size));
+        Long userId = UserHolder.getUser() == null ? null : UserHolder.getUser().getId();
+        return Result.ok(appShowService.list(city, type, date, sort, venueId, artistId, current, size, userId));
     }
 
     @GetMapping("/{performanceId}")
