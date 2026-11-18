@@ -56,6 +56,9 @@ public class Venue implements Serializable {
      */
     private Integer capacity;
 
+    /** 关注人数 */
+    private Integer followCount;
+
     /**
      * 创建时间
      */
