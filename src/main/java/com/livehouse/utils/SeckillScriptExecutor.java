@@ -116,15 +116,15 @@ public class SeckillScriptExecutor {
      * @param quantity     归还数量
      * @return true-本次调用真正执行了归还；false-命中幂等，跳过归还
      */
-    public boolean executeRestoreStockIdempotent(String requestId, String redisKeyPrefix,
-                                                  Long ticketTypeId, Long userId, Integer quantity) {
+    public boolean executeRestoreStockIdempotent(String requestId, String redisKeyPrefix, Long ticketTypeId, Long userId, Integer quantity) {
+        // 1.如果退票记录不存在（理论上不应该出现），直接回滚库存
         if (requestId == null || requestId.isEmpty()) {
-            // 没有requestId（理论上不应该出现），退化为直接执行，保证兜底可用
             log.warn("归还库存缺少requestId，跳过幂等校验直接执行，票种ID：{}，用户ID：{}", ticketTypeId, userId);
             executeRestoreStock(ticketTypeId, userId, quantity);
             return true;
         }
 
+        // 2.如果退票记录存在，那么从redis中检查该退票key是否存在，防止重复被归还库存
         String idemKey = redisKeyPrefix + requestId;
         Boolean firstTime = stringRedisTemplate.opsForValue()
                 .setIfAbsent(idemKey, "1", RedisConstants.SECKILL_IDEMPOTENT_TTL, TimeUnit.HOURS);
@@ -136,7 +136,7 @@ public class SeckillScriptExecutor {
 
         Long result = executeRestoreStock(ticketTypeId, userId, quantity);
         if (result == null || result != 0L) {
-            // 归还失败：释放占位标记，允许后续重试真正执行归还
+            // 3.归还失败：释放占位标记，允许后续重试真正执行归还
             stringRedisTemplate.delete(idemKey);
             log.error("幂等归还库存执行失败，requestId：{}，结果码：{}", requestId, result);
         }

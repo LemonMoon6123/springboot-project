@@ -40,9 +40,9 @@ public class RedisConstants {
 
     public static final Long SECKILL_IDEMPOTENT_TTL = 24L; // 单位：小时
 
-    // 退票库存归还幂等（退票记录可能被定时任务重复投递，归还动作需要防重）
+    // 退票库存归还幂等
     public static final String REFUND_RESTORED_KEY = "idem:refund:restored:";
 
-    /** 首页限时抢票入口（JSON，由 FlashSaleBannerScheduledTask 每 15 分钟刷新） */
+    /** 首页限时抢票入口（JSON，由 FlashSaleBannerScheduledTask 固定时间刷新） */
     public static final String FLASH_SALE_BANNER_KEY = "app:flash:sale:banner";
 }

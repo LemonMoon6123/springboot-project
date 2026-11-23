@@ -68,8 +68,7 @@ public class RefundConsumer {
         }
 
         try {
-            // 1. Redis库存幂等归还（同一退票记录只会真正归还一次，与下面的DB回补各自独立幂等，
-            //    避免"其中一步失败重试"时，已经成功的另一步被误判需要跳过或被重复执行）
+            // 1. Redis库存幂等归还
             seckillScriptExecutor.executeRestoreStockIdempotent(
                     "refund-" + record.getId(),
                     RedisConstants.REFUND_RESTORED_KEY,
@@ -77,8 +76,7 @@ public class RefundConsumer {
                     message.getUserId(),
                     message.getQuantity());
 
-            // 2. 数据库库存回补（票种表left_stock），单独用一个Redis标记做幂等，
-            //    保证重试时"已成功的DB回补"不会被重复执行，而"之前失败的DB回补"仍会被正常重试
+            // 2. 数据库库存幂等回补
             String dbRestoredKey = RedisConstants.REFUND_RESTORED_KEY + "db:" + record.getId();
             Boolean dbFirstTime = stringRedisTemplate.opsForValue()
                     .setIfAbsent(dbRestoredKey, "1", RedisConstants.SECKILL_IDEMPOTENT_TTL, TimeUnit.HOURS);
