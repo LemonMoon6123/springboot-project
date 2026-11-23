@@ -163,7 +163,11 @@ public class DataScreenServiceImpl implements IDataScreenService {
                 showData.put("演出ID", show.getId());
                 showData.put("演出标题", show.getTitle());
                 showData.put("艺人", show.getArtist());
-                showData.put("演出时间", show.getStartTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+                if (show.getStartTime() != null) {
+                    showData.put("演出时间", show.getStartTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+                } else {
+                    showData.put("演出时间", "—");
+                }
                 showData.put("状态", getShowStatusText(show.getStatus()));
                 
                 // 统计该演出的售票情况

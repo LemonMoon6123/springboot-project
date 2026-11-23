@@ -1,7 +1,10 @@
 package com.livehouse.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.livehouse.admin.AdminModuleRegistry;
 import com.livehouse.entity.Result;
 import com.livehouse.entity.StatusCode;
+import com.livehouse.service.IAdminManageService;
 import com.livehouse.service.IDataScreenService;
 import com.livehouse.utils.SeckillScriptExecutor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -28,6 +32,128 @@ public class AdminController {
     
     @Autowired
     private IDataScreenService dataScreenService;
+
+    @Autowired
+    private IAdminManageService adminManageService;
+
+    // ================== 通用 CRUD ==================
+
+  /** 模块列表（含列元数据） */
+    @GetMapping("/crud/modules")
+    public Result listCrudModules() {
+        return Result.ok(adminManageService.listModules());
+    }
+
+    @GetMapping("/crud/{module}/select-options")
+    public Result crudSelectOptions(@PathVariable String module,
+                                    @RequestParam(required = false) String keyword,
+                                    @RequestParam(defaultValue = "300") int limit) {
+        try {
+            return Result.ok(adminManageService.selectOptions(module, keyword, limit));
+        } catch (IllegalArgumentException e) {
+            return Result.fail(StatusCode.PARAM_ERROR, e.getMessage());
+        } catch (Exception e) {
+            log.error("下拉选项失败, module={}", module, e);
+            return Result.fail(StatusCode.SERVER_ERROR, "选项加载失败：" + e.getMessage());
+        }
+    }
+
+    @GetMapping("/crud/{module}/page")
+    public Result pageCrud(@PathVariable String module,
+                           @RequestParam(defaultValue = "1") long current,
+                           @RequestParam(defaultValue = "10") long size,
+                           @RequestParam(required = false) String keyword) {
+        try {
+            IPage<?> page = adminManageService.page(module, current, size, keyword);
+            return Result.ok(page.getRecords(), page.getTotal());
+        } catch (IllegalArgumentException e) {
+            return Result.fail(StatusCode.PARAM_ERROR, e.getMessage());
+        } catch (Exception e) {
+            log.error("分页查询失败, module={}", module, e);
+            return Result.fail(StatusCode.SERVER_ERROR, "分页查询失败：" + e.getMessage());
+        }
+    }
+
+    @GetMapping("/crud/{module}/{id}")
+    public Result getCrudById(@PathVariable String module, @PathVariable String id) {
+        try {
+            Object data = adminManageService.getById(module, parseCrudId(module, id));
+            if (data == null) {
+                return Result.fail(StatusCode.NOT_FOUND, "记录不存在");
+            }
+            return Result.ok(data);
+        } catch (IllegalArgumentException e) {
+            return Result.fail(StatusCode.PARAM_ERROR, e.getMessage());
+        } catch (Exception e) {
+            log.error("查询详情失败, module={}, id={}", module, id, e);
+            return Result.fail(StatusCode.SERVER_ERROR, "查询失败：" + e.getMessage());
+        }
+    }
+
+    @PostMapping("/crud/{module}")
+    public Result createCrud(@PathVariable String module, @RequestBody Map<String, Object> body) {
+        try {
+            boolean ok = adminManageService.create(module, body);
+            return ok ? Result.ok("创建成功") : Result.fail(StatusCode.SERVER_ERROR, "创建失败");
+        } catch (IllegalArgumentException e) {
+            return Result.fail(StatusCode.PARAM_ERROR, e.getMessage());
+        } catch (Exception e) {
+            log.error("创建失败, module={}", module, e);
+            return Result.fail(StatusCode.SERVER_ERROR, "创建失败：" + e.getMessage());
+        }
+    }
+
+    @PutMapping("/crud/{module}/{id}")
+    public Result updateCrud(@PathVariable String module, @PathVariable String id,
+                             @RequestBody Map<String, Object> body) {
+        try {
+            boolean ok = adminManageService.update(module, parseCrudId(module, id), body);
+            return ok ? Result.ok("更新成功") : Result.fail(StatusCode.NOT_FOUND, "记录不存在或更新失败");
+        } catch (IllegalArgumentException e) {
+            return Result.fail(StatusCode.PARAM_ERROR, e.getMessage());
+        } catch (Exception e) {
+            log.error("更新失败, module={}, id={}", module, id, e);
+            return Result.fail(StatusCode.SERVER_ERROR, "更新失败：" + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/crud/{module}/{id}")
+    public Result deleteCrud(@PathVariable String module, @PathVariable String id) {
+        try {
+            boolean ok = adminManageService.delete(module, parseCrudId(module, id));
+            return ok ? Result.ok("删除成功") : Result.fail(StatusCode.NOT_FOUND, "记录不存在或删除失败");
+        } catch (IllegalArgumentException e) {
+            return Result.fail(StatusCode.PARAM_ERROR, e.getMessage());
+        } catch (Exception e) {
+            log.error("删除失败, module={}, id={}", module, id, e);
+            return Result.fail(StatusCode.SERVER_ERROR, "删除失败：" + e.getMessage());
+        }
+    }
+
+    @PatchMapping("/crud/{module}/{id}/status")
+    public Result updateCrudStatus(@PathVariable String module, @PathVariable String id,
+                                  @RequestBody Map<String, Object> body) {
+        if (body == null || !body.containsKey("status")) {
+            return Result.fail(StatusCode.PARAM_ERROR, "缺少 status 字段");
+        }
+        try {
+            boolean ok = adminManageService.updateStatus(module, parseCrudId(module, id), body.get("status"));
+            return ok ? Result.ok("状态已更新") : Result.fail(StatusCode.NOT_FOUND, "记录不存在");
+        } catch (IllegalArgumentException e) {
+            return Result.fail(StatusCode.PARAM_ERROR, e.getMessage());
+        } catch (Exception e) {
+            log.error("更新状态失败, module={}, id={}", module, id, e);
+            return Result.fail(StatusCode.SERVER_ERROR, "更新状态失败：" + e.getMessage());
+        }
+    }
+
+    private Serializable parseCrudId(String module, String id) {
+        AdminModuleRegistry.require(module);
+        if ("member_level".equals(module)) {
+            return Integer.valueOf(id);
+        }
+        return Long.valueOf(id);
+    }
 
     /**
      * 查看Redis库存

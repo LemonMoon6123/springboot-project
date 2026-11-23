@@ -12,6 +12,8 @@ import com.livehouse.entity.RealNameAuth;
 import com.livehouse.mapper.AudienceMapper;
 import com.livehouse.mapper.RealNameAuthMapper;
 import com.livehouse.service.app.AppAudienceService;
+import com.livehouse.vo.app.audience.AudienceItemVo;
+import com.livehouse.vo.app.audience.AudienceListVo;
 import com.livehouse.utils.IdCardCryptoUtils;
 import com.livehouse.utils.RegexUtils;
 import org.springframework.stereotype.Service;
@@ -42,35 +44,35 @@ public class AppAudienceServiceImpl implements AppAudienceService {
     private static final int AUDIENCE_AUTH_PASS = 2;
 
     @Override
-    public Map<String, Object> list(Long userId) {
+    public AudienceListVo list(Long userId) {
         List<Audience> list = audienceMapper.selectList(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Audience>()
                         .eq(Audience::getUserId, userId)
                         .orderByDesc(Audience::getIsDefault)
                         .orderByDesc(Audience::getLastUsedTime));
-        List<Map<String, Object>> records = list.stream().map(a -> {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", String.valueOf(a.getId()));
-            m.put("name", a.getName());
-            m.put("idCardMask", a.getIdCardMask());
-            m.put("isDefault", Objects.equals(a.getIsDefault(), 1));
-            m.put("authStatus", a.getAuthStatus());
-            m.put("authStatusText", audienceAuthText(a.getAuthStatus()));
-            m.put("lastUsedTime", a.getLastUsedTime() == null ? null : a.getLastUsedTime().format(DT));
-            m.put("lastUsed", a.getLastUsedTime() == null ? null : a.getLastUsedTime().format(DT));
-            m.put("canDelete", true);
-            m.put("deleteBlockReason", null);
+        List<AudienceItemVo> records = list.stream().map(a -> {
+            AudienceItemVo m = new AudienceItemVo();
+            m.setId(String.valueOf(a.getId()));
+            m.setName(a.getName());
+            m.setIdCardMask(a.getIdCardMask());
+            m.setIsDefault(Objects.equals(a.getIsDefault(), 1));
+            m.setAuthStatus(a.getAuthStatus());
+            m.setAuthStatusText(audienceAuthText(a.getAuthStatus()));
+            m.setLastUsedTime(a.getLastUsedTime() == null ? null : a.getLastUsedTime().format(DT));
+            m.setLastUsed(a.getLastUsedTime() == null ? null : a.getLastUsedTime().format(DT));
+            m.setCanDelete(true);
+            m.setDeleteBlockReason(null);
             return m;
         }).collect(Collectors.toList());
 
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("maxCount", MAX_AUDIENCE);
-        data.put("records", records);
+        AudienceListVo data = new AudienceListVo();
+        data.setMaxCount(MAX_AUDIENCE);
+        data.setRecords(records);
         return data;
     }
 
     @Override
-    public Map<String, Object> create(Long userId, AudienceCreateRequest request) {
+    public AudienceListVo create(Long userId, AudienceCreateRequest request) {
         if (request == null || StrUtil.isBlank(request.getName())) {
             throw new StatusCodeException(StatusCode.PARAM_ERROR);
         }
@@ -133,7 +135,7 @@ public class AppAudienceServiceImpl implements AppAudienceService {
     }
 
     @Override
-    public Map<String, Object> update(Long userId, Long id, AudienceUpdateRequest request) {
+    public AudienceListVo update(Long userId, Long id, AudienceUpdateRequest request) {
         Audience audience = loadOwned(userId, id);
         if (request == null || StrUtil.isBlank(request.getName())) {
             throw new StatusCodeException(StatusCode.PARAM_ERROR);
@@ -181,7 +183,7 @@ public class AppAudienceServiceImpl implements AppAudienceService {
     }
 
     @Override
-    public Map<String, Object> delete(Long userId, Long id) {
+    public AudienceListVo delete(Long userId, Long id) {
         Audience audience = loadOwned(userId, id);
         if (audience.getCreateTime() != null
                 && Duration.between(audience.getCreateTime(), LocalDateTime.now()).toHours() < 24
@@ -211,7 +213,7 @@ public class AppAudienceServiceImpl implements AppAudienceService {
     }
 
     @Override
-    public Map<String, Object> setDefault(Long userId, Long id) {
+    public AudienceListVo setDefault(Long userId, Long id) {
         loadOwned(userId, id);
         Audience clear = new Audience();
         clear.setIsDefault(0);

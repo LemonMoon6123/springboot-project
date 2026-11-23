@@ -1,5 +1,6 @@
 package com.livehouse.controller;
 
+import com.livehouse.dto.app.VerifyScanRequest;
 import com.livehouse.entity.Result;
 import com.livehouse.entity.StatusCode;
 import com.livehouse.dto.UserDTO;
@@ -10,8 +11,6 @@ import com.livehouse.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 /**
  * 电子票控制器
@@ -47,14 +46,9 @@ public class ElectronicTicketController {
      * 核销电子票（推荐：通过请求体 JSON 传参，避免 Base64 密文中的 +、/、= 导致 URL 400 错误）
      */
     @PostMapping("/verify")
-    public Result verifyTicket(@RequestBody(required = false) Map<String, String> body,
+    public Result verifyTicket(@RequestBody(required = false) VerifyScanRequest body,
                                @RequestParam(value = "ticketCode", required = false) String ticketCodeParam) {
-        String ticketCode = null;
-        if (body != null && body.containsKey("ticketCode")) {
-            ticketCode = body.get("ticketCode");
-        } else if (ticketCodeParam != null) {
-            ticketCode = ticketCodeParam;
-        }
+        String ticketCode = body != null && body.getTicketCode() != null ? body.getTicketCode() : ticketCodeParam;
 
         if (ticketCode == null || ticketCode.trim().isEmpty()) {
             return Result.fail(StatusCode.TICKET_CODE_EMPTY);

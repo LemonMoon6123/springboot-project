@@ -1,13 +1,14 @@
 package com.livehouse.service.app;
 
+import com.livehouse.vo.app.search.SearchHistoryAddVo;
+
 import java.util.List;
-import java.util.Map;
 
 public interface AppSearchHistoryService {
 
     List<String> list(Long userId);
 
-    Map<String, Object> add(Long userId, String keyword);
+    SearchHistoryAddVo add(Long userId, String keyword);
 
     void removeOne(Long userId, String keyword);
 

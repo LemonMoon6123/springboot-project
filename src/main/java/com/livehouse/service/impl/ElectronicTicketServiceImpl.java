@@ -88,6 +88,7 @@ public class ElectronicTicketServiceImpl extends ServiceImpl<ElectronicTicketMap
             ticket.setShowId(order.getShowId());
             ticket.setTicketTypeId(order.getTicketTypeId());
             ticket.setVerifyStatus(0);
+            ticket.setSeatInfo(ElectronicTicket.DEFAULT_SEAT_INFO);
             ticket.setCreateTime(LocalDateTime.now());
 
             electronicTickets.add(ticket);

@@ -1,13 +1,16 @@
 package com.livehouse.service.app;
 
+import com.livehouse.vo.app.verify.VerifyScanResultVo;
+import com.livehouse.vo.app.verify.VerifySessionVo;
+import com.livehouse.vo.app.verify.VerifyStatsVo;
+
 import java.util.List;
-import java.util.Map;
 
 public interface AppVerifyService {
 
-    List<Map<String, Object>> sessions(Long userId);
+    List<VerifySessionVo> sessions(Long userId);
 
-    Map<String, Object> scan(Long operatorUserId, Long showId, String ticketCode, String shortCode, String gate);
+    VerifyScanResultVo scan(Long operatorUserId, Long showId, String ticketCode, String shortCode, String gate);
 
-    Map<String, Object> stats(Long userId, Long showId);
+    VerifyStatsVo stats(Long userId, Long showId);
 }

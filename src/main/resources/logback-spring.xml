@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
+    <!-- 控制台编码：Windows 默认 cmd/PowerShell 为 GBK；UTF-8 终端可设 logging.charset.console=UTF-8 或 chcp 65001 -->
+    <springProperty scope="context" name="CONSOLE_CHARSET" source="logging.charset.console" defaultValue="GBK"/>
     <!-- 日志输出目录（D盘） -->
     <property name="LOG_HOME" value="D:/logs/livehouse-ticket"/>
     <!-- 格式：时间 [线程] 级别 logger:行号 - 消息 -->
@@ -10,7 +12,7 @@
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>${LOG_PATTERN}</pattern>
-            <charset>UTF-8</charset>
+            <charset>${CONSOLE_CHARSET}</charset>
         </encoder>
     </appender>
 

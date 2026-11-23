@@ -3,8 +3,6 @@ package com.livehouse.service.app.credit;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.livehouse.entity.MemberLevel;
 import com.livehouse.entity.UserInfo;
-import com.livehouse.entity.CreditLog;
-import com.livehouse.mapper.CreditLogMapper;
 import com.livehouse.mapper.MemberLevelMapper;
 import com.livehouse.mapper.UserInfoMapper;
 import org.springframework.context.annotation.Lazy;
@@ -21,30 +19,21 @@ public class MemberLevelService {
     private MemberLevelMapper memberLevelMapper;
     @Resource
     private UserInfoMapper userInfoMapper;
-    @Resource
-    private CreditLogMapper creditLogMapper;
     @Lazy
     @Resource
     private CreditAccountService creditAccountService;
 
+    /** 查询：优先 user_info.total_credits 快照 */
     public int sumTotalCredits(Long userId) {
-        return creditLogMapper.selectList(new LambdaQueryWrapper<CreditLog>()
-                .eq(CreditLog::getUserId, userId)
-                .gt(CreditLog::getChangeAmount, 0)
-                .in(CreditLog::getStatus, 0, 1))
-                .stream().mapToInt(l -> l.getChangeAmount() == null ? 0 : l.getChangeAmount()).sum();
+        UserInfo info = userInfoMapper.selectById(userId);
+        if (info != null && info.getTotalCredits() != null) {
+            return info.getTotalCredits();
+        }
+        return creditAccountService.aggregateTotalFromLog(userId);
     }
 
     public MemberLevel resolveMemberLevel(Long userId) {
-        int totalCredits = sumTotalCredits(userId);
-        List<MemberLevel> levels = memberLevelMapper.selectList(new LambdaQueryWrapper<MemberLevel>()
-                .eq(MemberLevel::getStatus, 1)
-                .orderByDesc(MemberLevel::getMinTotalCredits));
-        MemberLevel matched = levels.stream()
-                .filter(l -> totalCredits >= l.getMinTotalCredits())
-                .max(Comparator.comparing(MemberLevel::getLevel))
-                .orElse(levelByNo(0));
-
+        MemberLevel matched = resolveMemberLevelByTotal(sumTotalCredits(userId));
         UserInfo info = userInfoMapper.selectById(userId);
         int legacy = info == null || info.getLevel() == null ? 0 : info.getLevel();
         if (matched.getLevel() < legacy) {
@@ -54,6 +43,16 @@ public class MemberLevelService {
             }
         }
         return matched;
+    }
+
+    public MemberLevel resolveMemberLevelByTotal(int totalCredits) {
+        List<MemberLevel> levels = memberLevelMapper.selectList(new LambdaQueryWrapper<MemberLevel>()
+                .eq(MemberLevel::getStatus, 1)
+                .orderByDesc(MemberLevel::getMinTotalCredits));
+        return levels.stream()
+                .filter(l -> totalCredits >= l.getMinTotalCredits())
+                .max(Comparator.comparing(MemberLevel::getLevel))
+                .orElse(levelByNo(0));
     }
 
     public MemberLevel levelByNo(int level) {
@@ -69,26 +68,15 @@ public class MemberLevelService {
         return ml;
     }
 
-  public MemberLevel nextLevel(MemberLevel current) {
-    return memberLevelMapper.selectList(new LambdaQueryWrapper<MemberLevel>()
-            .eq(MemberLevel::getStatus, 1)
-            .gt(MemberLevel::getLevel, current.getLevel())
-            .orderByAsc(MemberLevel::getLevel))
-        .stream().findFirst().orElse(null);
-  }
+    public MemberLevel nextLevel(MemberLevel current) {
+        return memberLevelMapper.selectList(new LambdaQueryWrapper<MemberLevel>()
+                .eq(MemberLevel::getStatus, 1)
+                .gt(MemberLevel::getLevel, current.getLevel())
+                .orderByAsc(MemberLevel::getLevel))
+                .stream().findFirst().orElse(null);
+    }
 
     public void refreshUserLevel(Long userId) {
-        MemberLevel resolved = resolveMemberLevel(userId);
-        UserInfo info = userInfoMapper.selectById(userId);
-        if (info == null) {
-            return;
-        }
-        int current = info.getLevel() == null ? 0 : info.getLevel();
-        int target = resolved.getLevel() == null ? 0 : resolved.getLevel();
-        if (target > current) {
-            info.setLevel(target);
-        }
-        info.setCredits(creditAccountService.sumAvailableCredits(userId));
-        userInfoMapper.updateById(info);
+        creditAccountService.syncCreditSnapshot(userId);
     }
 }

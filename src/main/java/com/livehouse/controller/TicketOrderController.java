@@ -1,8 +1,9 @@
 package com.livehouse.controller;
 
+import com.livehouse.dto.app.OrderReasonRequest;
+import com.livehouse.dto.UserDTO;
 import com.livehouse.entity.Result;
 import com.livehouse.entity.StatusCode;
-import com.livehouse.dto.UserDTO;
 import com.livehouse.entity.TicketOrder;
 import com.livehouse.service.ITicketOrderService;
 import com.livehouse.utils.UserHolder;
@@ -11,7 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 票务订单控制器
@@ -80,10 +80,11 @@ public class TicketOrderController {
      * 申请退票
      */
     @PostMapping("/refund/{orderId}")
-    public Result refundOrder(@PathVariable Long orderId, @RequestBody(required = false) Map<String, String> body) {
+    public Result refundOrder(@PathVariable Long orderId,
+                              @RequestBody(required = false) OrderReasonRequest body) {
         UserDTO user = UserHolder.getUser();
-        String reason = (body != null && body.get("reason") != null && !body.get("reason").trim().isEmpty())
-                ? body.get("reason").trim() : "用户主动申请退票";
+        String reason = (body != null && body.getReason() != null && !body.getReason().trim().isEmpty())
+                ? body.getReason().trim() : "用户主动申请退票";
 
         return ticketOrderService.requestRefund(orderId, user.getId(), reason);
     }

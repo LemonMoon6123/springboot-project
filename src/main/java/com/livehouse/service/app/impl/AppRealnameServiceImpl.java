@@ -8,14 +8,13 @@ import com.livehouse.mapper.RealNameAuthMapper;
 import com.livehouse.service.app.AppRealnameService;
 import com.livehouse.utils.IdCardCryptoUtils;
 import com.livehouse.utils.RegexUtils;
+import com.livehouse.vo.app.realname.RealnameVo;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 @Service
 public class AppRealnameServiceImpl implements AppRealnameService {
@@ -28,31 +27,31 @@ public class AppRealnameServiceImpl implements AppRealnameService {
     private IdCardCryptoUtils idCardCryptoUtils;
 
     @Override
-    public Map<String, Object> get(Long userId) {
+    public RealnameVo get(Long userId) {
         RealNameAuth auth = realNameAuthMapper.selectOne(new LambdaQueryWrapper<RealNameAuth>()
                 .eq(RealNameAuth::getUserId, userId));
-        Map<String, Object> data = new LinkedHashMap<>();
+        RealnameVo data = new RealnameVo();
         if (auth == null || auth.getAuthStatus() == null || auth.getAuthStatus() == RealNameAuth.STATUS_NONE) {
-            data.put("authStatus", 0);
-            data.put("authStatusText", "未认证");
-            data.put("canModify", false);
+            data.setAuthStatus(0);
+            data.setAuthStatusText("未认证");
+            data.setCanModify(false);
             return data;
         }
-        data.put("authStatus", auth.getAuthStatus());
-        data.put("authStatusText", authText(auth.getAuthStatus()));
-        data.put("realName", auth.getRealName());
-        data.put("idTypeText", idTypeText(auth.getIdType()));
-        data.put("idCardMask", auth.getIdCardMask());
-        data.put("phone", maskPhone(auth.getPhone()));
-        data.put("authTime", auth.getAuthTime() == null ? null : auth.getAuthTime().format(DT));
-        data.put("authChannel", auth.getAuthChannel());
-        data.put("canModify", false);
+        data.setAuthStatus(auth.getAuthStatus());
+        data.setAuthStatusText(authText(auth.getAuthStatus()));
+        data.setRealName(auth.getRealName());
+        data.setIdTypeText(idTypeText(auth.getIdType()));
+        data.setIdCardMask(auth.getIdCardMask());
+        data.setPhone(maskPhone(auth.getPhone()));
+        data.setAuthTime(auth.getAuthTime() == null ? null : auth.getAuthTime().format(DT));
+        data.setAuthChannel(auth.getAuthChannel());
+        data.setCanModify(false);
         return data;
     }
 
     @Override
     @Transactional
-    public Map<String, Object> submit(Long userId, String realName, Integer idType, String idCard, String phone) {
+    public RealnameVo submit(Long userId, String realName, Integer idType, String idCard, String phone) {
         if (realName == null || idCard == null) {
             throw new StatusCodeException(StatusCode.PARAM_ERROR);
         }

@@ -1,7 +1,8 @@
 package com.livehouse.service.app;
 
-import java.util.Map;
+import com.livehouse.vo.app.member.MemberInfoVo;
 
 public interface AppMemberService {
-    Map<String, Object> memberInfo(Long userId);
+
+    MemberInfoVo memberInfo(Long userId);
 }

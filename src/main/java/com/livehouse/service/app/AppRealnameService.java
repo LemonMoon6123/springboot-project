@@ -1,10 +1,10 @@
 package com.livehouse.service.app;
 
-import java.util.Map;
+import com.livehouse.vo.app.realname.RealnameVo;
 
 public interface AppRealnameService {
 
-    Map<String, Object> get(Long userId);
+    RealnameVo get(Long userId);
 
-    Map<String, Object> submit(Long userId, String realName, Integer idType, String idCard, String phone);
+    RealnameVo submit(Long userId, String realName, Integer idType, String idCard, String phone);
 }

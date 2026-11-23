@@ -38,17 +38,12 @@ public class UserInfo implements Serializable {
     private String introduce;
 
     /**
-     * 粉丝数量
-     */
-    private Integer fans;
-
-    /**
      * 关注的人的数量
      */
     private Integer followee;
 
     /**
-     * 性别，0：男，1：女
+     * 性别：0 未设置，1 男，2 女
      */
     private Integer gender;
 
@@ -58,9 +53,14 @@ public class UserInfo implements Serializable {
     private LocalDate birthday;
 
     /**
-     * 积分
+     * 可用积分快照；流水变动后 sync，查询优先读本字段
      */
     private Integer credits;
+
+    /**
+     * 累计积分快照（定级）；有效正向流水之和，只增口径
+     */
+    private Integer totalCredits;
 
     /**
      * 累计观演场次（核销后递增）

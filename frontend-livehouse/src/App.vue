@@ -828,7 +828,8 @@ async function sendCode() {
 
 async function login() {
   if (!loginForm.phone || !loginForm.code) return notify('请输入手机号和验证码', 'error')
-  const token = await call(() => api.login(loginForm), '登录成功')
+  const data = await call(() => api.login(loginForm), '登录成功')
+  const token = data && data.token ? data.token : data
   if (token) {
     setToken(token)
     await loadCurrentUser()

@@ -14,10 +14,12 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.util.List;
 
 @Service
 public class CreditAccountService {
+
+    public static final int STATUS_INVALID = 0;
+    public static final int STATUS_VALID = 1;
 
     @Resource
     private CreditLogMapper creditLogMapper;
@@ -40,61 +42,80 @@ public class CreditAccountService {
     @Resource
     private MemberLevelService memberLevelService;
 
-    public int sumTotalCredits(Long userId) {
-        List<CreditLog> logs = creditLogMapper.selectList(new LambdaQueryWrapper<CreditLog>()
-                .eq(CreditLog::getUserId, userId)
-                .gt(CreditLog::getChangeAmount, 0)
-                .in(CreditLog::getStatus, 0, 1));
-        return logs.stream().mapToInt(l -> l.getChangeAmount() == null ? 0 : l.getChangeAmount()).sum();
+    /** 查询：优先 user_info 快照，无行时从流水聚合 */
+    public int sumAvailableCredits(Long userId) {
+        UserInfo info = userInfoMapper.selectById(userId);
+        if (info != null && info.getCredits() != null) {
+            return info.getCredits();
+        }
+        return aggregateAvailableFromLog(userId);
     }
 
-    public int sumAvailableCredits(Long userId) {
-        LocalDateTime now = LocalDateTime.now();
-        List<CreditLog> logs = creditLogMapper.selectList(new LambdaQueryWrapper<CreditLog>()
+    int aggregateAvailableFromLog(Long userId) {
+        return creditLogMapper.selectList(new LambdaQueryWrapper<CreditLog>()
                 .eq(CreditLog::getUserId, userId)
-                .eq(CreditLog::getStatus, 1));
-        return logs.stream()
-                .filter(l -> l.getExpireTime() == null || l.getExpireTime().isAfter(now))
-                .mapToInt(l -> l.getChangeAmount() == null ? 0 : l.getChangeAmount())
-                .sum();
+                .eq(CreditLog::getStatus, STATUS_VALID))
+                .stream().mapToInt(l -> l.getChangeAmount() == null ? 0 : l.getChangeAmount()).sum();
+    }
+
+    int aggregateTotalFromLog(Long userId) {
+        return creditLogMapper.selectList(new LambdaQueryWrapper<CreditLog>()
+                .eq(CreditLog::getUserId, userId)
+                .eq(CreditLog::getStatus, STATUS_VALID)
+                .gt(CreditLog::getChangeAmount, 0))
+                .stream().mapToInt(l -> l.getChangeAmount() == null ? 0 : l.getChangeAmount()).sum();
+    }
+
+    /** 流水写入后调用：重算并写回 credits、total_credits，必要时升级 level */
+    @Transactional
+    public void syncCreditSnapshot(Long userId) {
+        int available = aggregateAvailableFromLog(userId);
+        int total = aggregateTotalFromLog(userId);
+        UserInfo info = userInfoMapper.selectById(userId);
+        if (info == null) {
+            return;
+        }
+        info.setCredits(available);
+        info.setTotalCredits(total);
+        MemberLevel resolved = memberLevelService.resolveMemberLevelByTotal(total);
+        int current = info.getLevel() == null ? 0 : info.getLevel();
+        int target = resolved.getLevel() == null ? 0 : resolved.getLevel();
+        if (target > current) {
+            info.setLevel(target);
+        }
+        userInfoMapper.updateById(info);
     }
 
     public int monthGain(Long userId) {
         LocalDateTime start = YearMonth.now().atDay(1).atStartOfDay();
         return creditLogMapper.selectList(new LambdaQueryWrapper<CreditLog>()
                 .eq(CreditLog::getUserId, userId)
+                .eq(CreditLog::getStatus, STATUS_VALID)
                 .gt(CreditLog::getChangeAmount, 0)
                 .ge(CreditLog::getCreateTime, start))
                 .stream().mapToInt(CreditLog::getChangeAmount).sum();
     }
 
-    public int expiringSoon(Long userId) {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime horizon = now.plusMonths(3);
-        return creditLogMapper.selectList(new LambdaQueryWrapper<CreditLog>()
-                .eq(CreditLog::getUserId, userId)
-                .eq(CreditLog::getStatus, 1)
-                .gt(CreditLog::getChangeAmount, 0)
-                .isNotNull(CreditLog::getExpireTime)
-                .le(CreditLog::getExpireTime, horizon)
-                .gt(CreditLog::getExpireTime, now))
-                .stream().mapToInt(CreditLog::getChangeAmount).sum();
-    }
-
+    /**
+     * 核销成功后即时发放：累计积分与可用积分同时入账（支付不发积分）。
+     *
+     * @return 本次发放积分数，0 表示未发放
+     */
     @Transactional
-    public void grantPendingAfterVerify(Long ticketId) {
+    public int grantAfterVerify(Long ticketId) {
         if (creditLogMapper.selectCount(new LambdaQueryWrapper<CreditLog>()
                 .eq(CreditLog::getBizId, String.valueOf(ticketId))
-                .eq(CreditLog::getType, "purchase")) > 0) {
-            return;
+                .eq(CreditLog::getType, "purchase")
+                .eq(CreditLog::getStatus, STATUS_VALID)) > 0) {
+            return 0;
         }
         ElectronicTicket ticket = electronicTicketMapper.selectById(ticketId);
         if (ticket == null || ticket.getVerifyStatus() == null || ticket.getVerifyStatus() != 1) {
-            return;
+            return 0;
         }
         TicketOrder order = ticketOrderMapper.selectById(ticket.getOrderId());
         if (order == null || order.getPayAmount() == null) {
-            return;
+            return 0;
         }
         int qty = order.getQuantity() == null || order.getQuantity() <= 0 ? 1 : order.getQuantity();
         BigDecimal ticketPay = order.getPayAmount()
@@ -103,7 +124,7 @@ public class CreditAccountService {
         BigDecimal rate = livehouseProperties.getCredit().getRatePerYuan();
         int points = ticketPay.multiply(rate).setScale(0, RoundingMode.HALF_UP).intValue();
         if (points <= 0) {
-            return;
+            return 0;
         }
 
         String title = "观演";
@@ -116,14 +137,11 @@ public class CreditAccountService {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        int delayHours = livehouseProperties.getCredit().getIssueDelayHours();
         CreditLog log = new CreditLog();
         log.setUserId(ticket.getUserId());
         log.setChangeAmount(points);
-        log.setBalance(sumAvailableCredits(ticket.getUserId()));
         log.setType("purchase");
-        log.setStatus(0);
-        log.setReleaseTime(now.plusHours(delayHours));
+        log.setStatus(STATUS_VALID);
         log.setBizId(String.valueOf(ticketId));
         log.setRemark("购票获得 · " + title);
         log.setCreateTime(now);
@@ -134,50 +152,8 @@ public class CreditAccountService {
             info.setWatchCount((info.getWatchCount() == null ? 0 : info.getWatchCount()) + 1);
             userInfoMapper.updateById(info);
         }
-        memberLevelService.refreshUserLevel(ticket.getUserId());
-    }
-
-    @Transactional
-    public void releaseDueCredits() {
-        LocalDateTime now = LocalDateTime.now();
-        List<CreditLog> pending = creditLogMapper.selectList(new LambdaQueryWrapper<CreditLog>()
-                .eq(CreditLog::getStatus, 0)
-                .le(CreditLog::getReleaseTime, now));
-        for (CreditLog log : pending) {
-            int available = sumAvailableCredits(log.getUserId());
-            log.setStatus(1);
-            log.setBalance(available + log.getChangeAmount());
-            int months = livehouseProperties.getCredit().getExpireMonths();
-            log.setExpireTime(now.plusMonths(months));
-            creditLogMapper.updateById(log);
-            memberLevelService.refreshUserLevel(log.getUserId());
-        }
-    }
-
-    @Transactional
-    public void expireCredits() {
-        LocalDateTime now = LocalDateTime.now();
-        List<CreditLog> expired = creditLogMapper.selectList(new LambdaQueryWrapper<CreditLog>()
-                .eq(CreditLog::getStatus, 1)
-                .gt(CreditLog::getChangeAmount, 0)
-                .isNotNull(CreditLog::getExpireTime)
-                .lt(CreditLog::getExpireTime, now));
-        for (CreditLog log : expired) {
-            log.setStatus(2);
-            creditLogMapper.updateById(log);
-            int available = sumAvailableCredits(log.getUserId());
-            CreditLog neg = new CreditLog();
-            neg.setUserId(log.getUserId());
-            neg.setChangeAmount(-log.getChangeAmount());
-            neg.setBalance(Math.max(0, available));
-            neg.setType("expire");
-            neg.setStatus(1);
-            neg.setRemark("积分过期");
-            neg.setBizId("expire:" + log.getId());
-            neg.setCreateTime(now);
-            creditLogMapper.insert(neg);
-            memberLevelService.refreshUserLevel(log.getUserId());
-        }
+        syncCreditSnapshot(ticket.getUserId());
+        return points;
     }
 
     @Transactional
@@ -210,13 +186,11 @@ public class CreditAccountService {
             throw new StatusCodeException(StatusCode.GOODS_SOLD_OUT);
         }
 
-        int newBalance = available - goods.getCreditPrice();
         CreditLog neg = new CreditLog();
         neg.setUserId(userId);
         neg.setChangeAmount(-goods.getCreditPrice());
-        neg.setBalance(newBalance);
         neg.setType("exchange");
-        neg.setStatus(1);
+        neg.setStatus(STATUS_VALID);
         neg.setRemark("积分兑换 · " + goods.getName());
         neg.setCreateTime(LocalDateTime.now());
         creditLogMapper.insert(neg);
@@ -231,11 +205,7 @@ public class CreditAccountService {
         ex.setCreateTime(LocalDateTime.now());
         creditExchangeMapper.insert(ex);
 
-        UserInfo info = userInfoMapper.selectById(userId);
-        if (info != null) {
-            info.setCredits(newBalance);
-            userInfoMapper.updateById(info);
-        }
+        syncCreditSnapshot(userId);
         return ex;
     }
 }

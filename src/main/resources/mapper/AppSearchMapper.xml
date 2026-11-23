@@ -29,10 +29,10 @@
             AND s.start_time &lt; #{timeEnd}
         </if>
         <if test="priceMin != null">
-            AND COALESCE(s.min_price, p.min_price) &gt;= #{priceMin}
+            AND <include refid="com.livehouse.mapper.AppShowMapper.performanceMinListedTicketPrice"/> &gt;= #{priceMin}
         </if>
         <if test="priceMax != null">
-            AND COALESCE(s.min_price, p.min_price) &lt;= #{priceMax}
+            AND <include refid="com.livehouse.mapper.AppShowMapper.performanceMinListedTicketPrice"/> &lt;= #{priceMax}
         </if>
         <!-- 有票：开售中且有余量 -->
         <if test="hasTicket != null and hasTicket == 1">
@@ -52,21 +52,9 @@
         <include refid="searchShowWhere"/>
     </select>
 
-    <select id="selectSearchShows" resultType="java.util.HashMap">
-        SELECT s.id AS showId,
-               p.id AS performanceId,
-               COALESCE(p.title, s.title) AS title,
-               COALESCE(p.artist_name, s.artist) AS artist,
-               COALESCE(p.poster, s.image) AS cover,
-               p.poster_tag AS posterTag,
-               s.start_time AS startTime,
-               v.name AS venueName,
-               v.city AS city,
-               COALESCE(s.min_price, p.min_price) AS minPrice,
-               s.status AS status,
-               COALESCE(p.is_real_name, s.is_real_name, 1) AS isRealName,
-               COALESCE(p.want_count, 0) AS wantCount,
-               s.sell_count AS sellCount
+    <select id="selectSearchShows" resultMap="com.livehouse.mapper.AppShowMapper.ShowCardVoMap">
+        SELECT
+        <include refid="com.livehouse.mapper.AppShowMapper.showCardColumns"/>
         <include refid="searchShowWhere"/>
         <choose>
             <when test="sort == 'hot'">
@@ -94,8 +82,17 @@
         </if>
     </select>
 
-    <select id="selectSearchArtists" resultType="java.util.HashMap">
-        SELECT a.id,
+    <resultMap id="SearchArtistRowMap" type="com.livehouse.vo.app.search.SearchArtistRowVo">
+        <result column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="avatar" property="avatar"/>
+        <result column="type" property="type"/>
+        <result column="city" property="city"/>
+        <result column="followCount" property="followCount"/>
+    </resultMap>
+
+    <select id="selectSearchArtists" resultMap="SearchArtistRowMap">
+        SELECT CAST(a.id AS CHAR) AS id,
                a.name,
                a.avatar,
                a.type,
@@ -110,6 +107,22 @@
         LIMIT #{offset}, #{size}
     </select>
 
+  <!-- 热搜艺人榜：按平台关注数降序，最多 10 条 -->
+    <resultMap id="HotArtistVoMap" type="com.livehouse.vo.app.search.HotArtistVo">
+        <result column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="followCount" property="followCount"/>
+    </resultMap>
+
+    <select id="selectHotArtists" resultMap="HotArtistVoMap">
+        SELECT CAST(a.id AS CHAR) AS id,
+               a.name,
+               COALESCE(a.follow_count, 0) AS followCount
+        FROM tb_artist a
+        ORDER BY COALESCE(a.follow_count, 0) DESC, a.id ASC
+        LIMIT #{limit}
+    </select>
+
     <select id="countSearchVenues" resultType="long">
         SELECT COUNT(*)
         FROM tb_venue v
@@ -122,8 +135,15 @@
         </if>
     </select>
 
-    <select id="selectSearchVenues" resultType="java.util.HashMap">
-        SELECT v.id,
+    <resultMap id="SearchVenueItemMap" type="com.livehouse.vo.app.search.SearchVenueItemVo">
+        <result column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="city" property="city"/>
+        <result column="address" property="address"/>
+    </resultMap>
+
+    <select id="selectSearchVenues" resultMap="SearchVenueItemMap">
+        SELECT CAST(v.id AS CHAR) AS id,
                v.name,
                v.city,
                v.address
@@ -139,8 +159,14 @@
         LIMIT #{offset}, #{size}
     </select>
 
-    <select id="selectWantRankTop3" resultType="java.util.HashMap">
-        SELECT p.id AS performanceId,
+    <resultMap id="WantRankItemMap" type="com.livehouse.vo.app.search.WantRankItemVo">
+        <result column="performanceId" property="performanceId"/>
+        <result column="title" property="title"/>
+        <result column="wantCount" property="wantCount"/>
+    </resultMap>
+
+    <select id="selectWantRankTop3" resultMap="WantRankItemMap">
+        SELECT CAST(p.id AS CHAR) AS performanceId,
                p.title,
                COALESCE(p.want_count, 0) AS wantCount
         FROM tb_performance p

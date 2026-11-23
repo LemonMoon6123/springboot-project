@@ -19,12 +19,11 @@ public class LivehouseProperties {
     private Credit credit = new Credit();
     private Upload upload = new Upload();
     private Ticket ticket = new Ticket();
-    private WxLogin wxLogin = new WxLogin();
     private Sms sms = new Sms();
 
     @Data
     public static class Pay {
-        /** 本地联调 mock 支付开关 */
+        /** 本地联调 mock 微信支付 */
         private boolean mockEnabled;
         private Wx wx = new Wx();
     }
@@ -50,8 +49,6 @@ public class LivehouseProperties {
     @Data
     public static class Credit {
         private BigDecimal ratePerYuan = new BigDecimal("0.05");
-        private int issueDelayHours = 24;
-        private int expireMonths = 24;
     }
 
     @Data
@@ -63,13 +60,6 @@ public class LivehouseProperties {
     @Data
     public static class Ticket {
         private String encryptionKey = "LiveHouse2024SecretKey!@#$%^&*()";
-    }
-
-    @Data
-    public static class WxLogin {
-        /** dev：任意 code 映射为固定 openid，无需微信密钥 */
-        private boolean mockOpenid = true;
-        private String mockOpenidPrefix = "dev_wx_openid_";
     }
 
     @Data

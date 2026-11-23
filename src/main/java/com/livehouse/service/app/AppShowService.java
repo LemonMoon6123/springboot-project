@@ -1,13 +1,15 @@
 package com.livehouse.service.app;
 
-import java.util.Map;
+import com.livehouse.vo.app.show.HomeVo;
+import com.livehouse.vo.app.show.ShowDetailVo;
+import com.livehouse.vo.app.show.ShowListVo;
 
 public interface AppShowService {
 
-    Map<String, Object> home(String city, String type, int current, int size);
+    HomeVo home(String city, String type, int current, int size);
 
-    Map<String, Object> list(String city, String type, String date, String sort,
-                               Long venueId, Long artistId, int current, int size, Long userId);
+    ShowListVo list(String city, String type, String date, String sort,
+                    Long venueId, Long artistId, int current, int size, Long userId);
 
-    Map<String, Object> detail(Long performanceId, Long showId, boolean noticesAll, Long userId);
+    ShowDetailVo detail(Long performanceId, Long showId, boolean noticesAll, Long userId);
 }

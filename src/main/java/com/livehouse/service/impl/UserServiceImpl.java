@@ -1,16 +1,17 @@
 package com.livehouse.service.impl;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.bean.copier.CopyOptions;
-import cn.hutool.core.lang.UUID;
 import cn.hutool.core.util.RandomUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.livehouse.dto.LoginFormDTO;
 import com.livehouse.entity.Result;
 import com.livehouse.entity.StatusCode;
-import com.livehouse.dto.UserDTO;
 import com.livehouse.entity.User;
+import com.livehouse.exception.StatusCodeException;
+import com.livehouse.util.app.UserLoginSupport;
+import com.livehouse.vo.app.user.LoginTokenVo;
 import com.livehouse.config.LivehouseProperties;
+import com.livehouse.entity.UserInfo;
+import com.livehouse.mapper.UserInfoMapper;
 import com.livehouse.mapper.UserMapper;
 import com.livehouse.service.IUserService;
 import com.livehouse.utils.RegexUtils;
@@ -19,8 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 
 import static com.livehouse.utils.RedisConstants.*;
@@ -36,6 +36,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     private StringRedisTemplate stringRedisTemplate;
     @Autowired
     private LivehouseProperties livehouseProperties;
+    @Autowired
+    private UserInfoMapper userInfoMapper;
 
     @Override
     public Result sendCode(String phone) {
@@ -45,14 +47,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             return Result.fail(StatusCode.PHONE_FORMAT_ERROR);
         }
         
-        // 3. 生成验证码（可选 livehouse.sms.fixed-login-code，否则随机 6 位）
-        String fixed = livehouseProperties.getSms() == null ? null : livehouseProperties.getSms().getFixedLoginCode();
-        String code = (fixed != null && !fixed.isEmpty()) ? fixed : RandomUtil.randomNumbers(6);
+        // 3. 生成验证码
+        String code = RandomUtil.randomNumbers(6);
 
-        // 4. 写入 Redis，登录时比对（与黑马点评一致，未接真实短信时看本行日志）
+        // 4. 写入 Redis，登录时比对
         stringRedisTemplate.opsForValue().set(LOGIN_CODE_KEY + phone, code, LOGIN_CODE_TTL, TimeUnit.MINUTES);
 
-        log.info("短信验证码已写入 Redis key={}{}，TTL={}min，code={}（未接短信网关时本地联调用此码登录）",
+        log.info("短信验证码已写入 Redis key={}{}，TTL={}min，验证码：{}",
                 LOGIN_CODE_KEY, phone, LOGIN_CODE_TTL, code);
 
         // 返回ok
@@ -60,56 +61,57 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     }
 
     @Override
-    public Result login(LoginFormDTO loginForm) {
-        // 1.校验手机号
+    public LoginTokenVo login(LoginFormDTO loginForm) {
         String phone = loginForm.getPhone();
         if (RegexUtils.isPhoneInvalid(phone)) {
-            return Result.fail(StatusCode.PHONE_FORMAT_ERROR);
+            throw new StatusCodeException(StatusCode.PHONE_FORMAT_ERROR);
         }
-        
-        // 2.从redis获取验证码并校验
         String cacheCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY + phone);
         String code = loginForm.getCode();
         if (cacheCode == null || !cacheCode.equals(code)) {
-            // 3.不一致，报错
-            return Result.fail(StatusCode.SMS_CODE_ERROR);
+            throw new StatusCodeException(StatusCode.SMS_CODE_ERROR);
         }
-
-        // 4.一致，根据手机号查询用户 select * from tb_user where phone = ?
         User user = query().eq("phone", phone).one();
-
-        // 5.判断用户是否存在
         if (user == null) {
-            // 6.不存在，创建新用户并保存
             user = createUserWithPhone(phone);
+        } else {
+            ensureUserInfo(user.getId());
         }
+        return UserLoginSupport.issueToken(user, stringRedisTemplate);
+    }
 
-        // 7.保存用户信息到 redis中
-        // 7.1.随机生成token，作为登录令牌
-        String token = UUID.randomUUID().toString(true);
-        // 7.2.将User对象转为HashMap存储
-        UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
-        Map<String, Object> userMap = BeanUtil.beanToMap(userDTO, new HashMap<>(),
-                CopyOptions.create()
-                        .setIgnoreNullValue(true)
-                        .setFieldValueEditor((fieldName, fieldValue) -> fieldValue != null ? fieldValue.toString() : ""));
-        // 7.3.存储
-        String tokenKey = LOGIN_USER_KEY + token;
-        stringRedisTemplate.opsForHash().putAll(tokenKey, userMap);
-        // 7.4.设置token有效期
-        stringRedisTemplate.expire(tokenKey, LOGIN_USER_TTL, TimeUnit.MINUTES);
-
-        // 8.返回token
-        return Result.ok(token);
+    @Override
+    public String issueLoginToken(User user) {
+        return UserLoginSupport.issueToken(user, stringRedisTemplate).getToken();
     }
 
     private User createUserWithPhone(String phone) {
         // 1.创建用户
         User user = new User();
         user.setPhone(phone);
-        user.setNickName("user_" + RandomUtil.randomString(10));
+        user.setNickName("用户_" + RandomUtil.randomString(10));
+        user.setCreateTime(LocalDateTime.now());
+        user.setUpdateTime(LocalDateTime.now());
         // 2.保存用户
         save(user);
+        ensureUserInfo(user.getId());
         return user;
+    }
+
+    /** 与微信登录一致：保证 tb_user_info 存在，否则「我的」积分/等级等全为 0 */
+    private void ensureUserInfo(Long userId) {
+        if (userId == null || userInfoMapper.selectById(userId) != null) {
+            return;
+        }
+        UserInfo info = new UserInfo();
+        info.setUserId(userId);
+        info.setLevel(0);
+        info.setCredits(0);
+        info.setTotalCredits(0);
+        info.setWatchCount(0);
+        info.setFollowee(0);
+        info.setCreateTime(LocalDateTime.now());
+        info.setUpdateTime(LocalDateTime.now());
+        userInfoMapper.insert(info);
     }
 }

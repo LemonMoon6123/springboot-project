@@ -8,9 +8,11 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.livehouse.entity.Result;
 import com.livehouse.entity.StatusCode;
 import com.livehouse.dto.ShowDTO;
+import com.livehouse.entity.Performance;
 import com.livehouse.entity.Show;
 import com.livehouse.entity.TicketType;
 import com.livehouse.entity.Venue;
+import com.livehouse.mapper.PerformanceMapper;
 import com.livehouse.mapper.ShowMapper;
 import com.livehouse.service.IShowService;
 import com.livehouse.service.ITicketTypeService;
@@ -50,6 +52,9 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
 
     @Autowired
     private ITicketTypeService ticketTypeService;
+
+    @Autowired
+    private PerformanceMapper performanceMapper;
 
     // 每页显示数量
     private static final int DEFAULT_PAGE_SIZE = 5;
@@ -206,7 +211,12 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
             dto.setId(show.getId());
             dto.setArtist(show.getArtist());
             dto.setTitle(show.getTitle());
-            dto.setType(show.getType());
+            if (show.getPerformanceId() != null) {
+                Performance perf = performanceMapper.selectById(show.getPerformanceId());
+                if (perf != null) {
+                    dto.setType(perf.getType());
+                }
+            }
             dto.setStartTime(show.getStartTime());
             dto.setEndTime(show.getEndTime());
             dto.setStatus(show.getStatus());

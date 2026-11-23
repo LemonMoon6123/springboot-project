@@ -44,17 +44,23 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 
         // 登录拦截器：拦截需要登录的接口
         registry.addInterceptor(new LoginInterceptor())
+                .addPathPatterns("/**")
                 .excludePathPatterns(
+                        "/admin/**",
+                        "/admin",
                         "/user/code",
                         "/user/login",
                         "/show/**",
                         "/venue/**",
                         "/upload/**",
                         "/uploads/**",  // 静态资源访问，不需要登录
+                        "/images/**",
                         "/ticket/detail",       // 电子票详情（Query参数形式）
                         "/ticket/detail/**",
-                        "/app/user/login/wx",
+                        "/app/user/login/staff-demo",
                         "/app/show/**",
+                        "/app/venue/**",
+                        "/app/config/**",
                         "/app/search",
                         "/app/search/**",
                         "/app/pay/notify/wxpay"
@@ -79,5 +85,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addResourceHandler(urlPrefix + "**")
                 .addResourceLocations(absoluteUploadPath)
                 .setCachePeriod(3600 * 24 * 7); // 缓存7天
+
+        registry.addResourceHandler("/images/**")
+                .addResourceLocations("classpath:/static/images/")
+                .setCachePeriod(3600 * 24);
     }
 }

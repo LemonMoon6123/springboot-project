@@ -27,11 +27,11 @@ public class RefundRecord implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 处理状态（以 DDL tb_refund_record.status 为准：0处理中 1已完成 2失败待重试；
-     * 规格书部分接口文案为 1/2/3，Service 层做映射）
+     * 处理状态：0处理中 1审核通过 2审核不通过
      */
     public static final int STATUS_PENDING = 0;
     public static final int STATUS_SUCCESS = 1;
+    /** 审核不通过 */
     public static final int STATUS_FAILED = 2;
 
     /**
@@ -71,14 +71,19 @@ public class RefundRecord implements Serializable {
     private BigDecimal amount;
 
     /**
-     * 处理状态：0处理中 1已完成 2处理失败（待重试）
+     * 处理状态：0处理中 1审核通过 2审核不通过
      */
     private Integer status;
 
     /**
-     * 退票原因
+     * 用户申请退款理由
      */
     private String reason;
+
+    /**
+     * 管理员审核不通过理由
+     */
+    private String auditRejectReason;
 
     /**
      * 创建时间

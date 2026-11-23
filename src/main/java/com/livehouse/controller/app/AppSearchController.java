@@ -30,4 +30,9 @@ public class AppSearchController {
         Long userId = UserHolder.getUser() == null ? null : UserHolder.getUser().getId();
         return Result.ok(appSearchService.search(keyword, city, time, artist, price, hasTicket, sort, current, size, userId));
     }
+
+    @GetMapping("/hot-artists")
+    public Result hotArtists(@RequestParam(defaultValue = "10") int limit) {
+        return Result.ok(appSearchService.hotArtists(limit));
+    }
 }

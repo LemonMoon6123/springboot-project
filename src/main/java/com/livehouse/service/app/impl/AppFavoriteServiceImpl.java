@@ -7,6 +7,9 @@ import com.livehouse.exception.StatusCodeException;
 import com.livehouse.mapper.*;
 import com.livehouse.service.app.AppCommentService;
 import com.livehouse.service.app.AppFavoriteService;
+import com.livehouse.vo.app.common.AppPageVo;
+import com.livehouse.vo.app.favorite.FavoriteActionVo;
+import com.livehouse.vo.app.favorite.FavoriteRecordVo;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,14 +37,19 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
     @Resource
     private ShowMapper showMapper;
     @Resource
+    private TicketTypeMapper ticketTypeMapper;
+    @Resource
     private AppCommentService appCommentService;
 
     @Override
     @Transactional
     // 返回“followed: true”的Map
-    public Map<String, Object> add(Long userId, String targetType, Long targetId) {
+    public FavoriteActionVo add(Long userId, String targetType, Long targetId) {
+        if (userId == null) {
+            throw new StatusCodeException(StatusCode.UNAUTHORIZED, "请先登录");
+        }
         if (targetType == null || targetId == null) {
-            throw new StatusCodeException(StatusCode.PARAM_ERROR);
+            throw new StatusCodeException(StatusCode.PARAM_ERROR, "targetType 或 targetId 不能为空");
         }
         String type = targetType.trim().toLowerCase();
         validateTarget(type, targetId);
@@ -83,7 +91,7 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
     @Override
     @Transactional
     // 返回followed: false的Map
-    public Map<String, Object> remove(Long userId, String targetType, Long targetId) {
+    public FavoriteActionVo remove(Long userId, String targetType, Long targetId) {
         if (targetType == null || targetId == null) {
             throw new StatusCodeException(StatusCode.PARAM_ERROR);
         }
@@ -117,26 +125,36 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
         return favoriteResult(type, targetId, false);
     }
 
-    private Map<String, Object> favoriteResult(String type, Long targetId, boolean followed) {
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("followed", followed);
+    private FavoriteActionVo favoriteResult(String type, Long targetId, boolean followed) {
+        FavoriteActionVo data = new FavoriteActionVo();
+        data.setFollowed(followed);
         if ("show".equals(type)) {
             Performance p = performanceMapper.selectById(targetId);
             if (p != null) {
-                data.put("wantCount", p.getWantCount() == null ? 0 : p.getWantCount());
+                data.setWantCount(p.getWantCount() == null ? 0 : p.getWantCount());
+            }
+        } else if ("artist".equals(type)) {
+            Artist a = artistMapper.selectById(targetId);
+            if (a != null) {
+                data.setFansCount(a.getFollowCount() == null ? 0 : a.getFollowCount());
+            }
+        } else if ("venue".equals(type)) {
+            Venue v = venueMapper.selectById(targetId);
+            if (v != null) {
+                data.setFollowCount(v.getFollowCount() == null ? 0 : v.getFollowCount());
             }
         }
         return data;
     }
 
     @Override
-    public Map<String, Object> list(Long userId, String type, int current, int size) {
+    public AppPageVo<FavoriteRecordVo> list(Long userId, String type, int current, int size) {
         size = Math.min(Math.max(size, 1), 50);
         current = Math.max(current, 1);
         if (type == null || type.isEmpty()) {
             type = "want";
         }
-        List<Map<String, Object>> records;
+        List<FavoriteRecordVo> records;
         long total;
         switch (type) {
             case "seen":
@@ -159,15 +177,8 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
         }
         int from = (current - 1) * size;
         int to = Math.min(from + size, records.size());
-        List<Map<String, Object>> page = from >= records.size() ? Collections.emptyList() : records.subList(from, to);
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("records", page);
-        data.put("total", total);
-        data.put("current", current);
-        data.put("size", size);
-        data.put("pages", total == 0 ? 0 : (total + size - 1) / size);
-        return data;
+        List<FavoriteRecordVo> page = from >= records.size() ? Collections.emptyList() : records.subList(from, to);
+        return AppPageVo.of(page, total, current, size);
     }
 
     private void validateTarget(String type, Long targetId) {
@@ -181,97 +192,189 @@ public class AppFavoriteServiceImpl implements AppFavoriteService {
             }
         } else if ("venue".equals(type)) {
             if (venueMapper.selectById(targetId) == null) {
-                throw new StatusCodeException(StatusCode.PARAM_ERROR, "场馆不存在");
+                throw new StatusCodeException(StatusCode.PARAM_ERROR,
+                        "场馆不存在（id=" + targetId + "），请刷新演出详情后重试");
             }
         } else {
             throw new StatusCodeException(StatusCode.PARAM_ERROR, "targetType 无效");
         }
     }
 
-    private List<Map<String, Object>> listWantShows(Long userId) {
+    private List<FavoriteRecordVo> listWantShows(Long userId) {
+        LocalDateTime now = LocalDateTime.now();
         List<Favorite> favs = favoriteMapper.selectList(new LambdaQueryWrapper<Favorite>()
                 .eq(Favorite::getUserId, userId)
                 .eq(Favorite::getTargetType, "show")
                 .orderByDesc(Favorite::getCreateTime));
-        List<Map<String, Object>> out = new ArrayList<>();
+        List<FavoriteRecordVo> out = new ArrayList<>();
         for (Favorite f : favs) {
             Performance p = performanceMapper.selectById(f.getTargetId());
             if (p == null) {
                 continue;
             }
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("targetType", "show");
-            m.put("targetId", String.valueOf(f.getTargetId()));
-            m.put("performanceId", String.valueOf(f.getTargetId()));
-            m.put("title", p.getTitle());
-            m.put("cover", p.getPoster());
-            m.put("wantCount", p.getWantCount());
-            m.put("createTime", f.getCreateTime() == null ? null : f.getCreateTime().format(DT));
-            m.put("canComment", false);
-            m.put("note", "想看");
+            Show show = resolveWantShow(f.getTargetId(), now);
+            FavoriteRecordVo m = new FavoriteRecordVo();
+            m.setTargetType("show");
+            m.setTargetId(String.valueOf(f.getTargetId()));
+            m.setPerformanceId(String.valueOf(f.getTargetId()));
+            m.setTitle(p.getTitle());
+            m.setCover(p.getPoster());
+            m.setWantCount(p.getWantCount());
+            m.setCreateTime(f.getCreateTime() == null ? null : f.getCreateTime().format(DT));
+            m.setCanComment(false);
+            m.setNote("想看");
+            if (show != null) {
+                m.setShowId(String.valueOf(show.getId()));
+                m.setShowTimeText(show.getStartTime() == null ? ""
+                        : show.getStartTime().format(DateTimeFormatter.ofPattern("M月d日 HH:mm")));
+                Venue venue = show.getVenueId() == null ? null : venueMapper.selectById(show.getVenueId());
+                m.setVenueName(venue == null ? "" : venue.getName());
+                m.setPriceText(com.livehouse.util.PerformanceTicketPrice.priceText(ticketTypeMapper, f.getTargetId()));
+            }
             out.add(m);
         }
         return out;
     }
 
+    /** 想看列表进详情：优先进行中场次，其次最近未开演，否则最近一场（含已结束） */
+    private Show resolveWantShow(Long performanceId, LocalDateTime now) {
+        List<Show> shows = showMapper.selectList(new LambdaQueryWrapper<Show>()
+                .eq(Show::getPerformanceId, performanceId)
+                .in(Show::getStatus, 1, 2, 3, 4)
+                .orderByAsc(Show::getStartTime));
+        if (shows.isEmpty()) {
+            return null;
+        }
+        for (Show s : shows) {
+            if (isShowOngoing(s, now)) {
+                return s;
+            }
+        }
+        for (Show s : shows) {
+            if (s.getStartTime() != null && s.getStartTime().isAfter(now)) {
+                return s;
+            }
+        }
+        Show latestPast = null;
+        for (Show s : shows) {
+            if (s.getStartTime() != null && !s.getStartTime().isAfter(now)) {
+                latestPast = s;
+            }
+        }
+        return latestPast != null ? latestPast : shows.get(shows.size() - 1);
+    }
+
+    private static boolean isShowOngoing(Show s, LocalDateTime now) {
+        if (s.getStartTime() == null || s.getStartTime().isAfter(now)) {
+            return false;
+        }
+        return s.getEndTime() == null || !s.getEndTime().isBefore(now);
+    }
+
+    private static String artistListDesc(Artist a) {
+        if (a == null) {
+            return "";
+        }
+        if (a.getIntro() != null && !a.getIntro().trim().isEmpty()) {
+            String intro = a.getIntro().trim();
+            return intro.length() > 40 ? intro.substring(0, 40) + "…" : intro;
+        }
+        String type = a.getType() == null ? "" : a.getType().trim();
+        String city = a.getCity() == null ? "" : a.getCity().trim();
+        if (!type.isEmpty() && !city.isEmpty()) {
+            return type + " · " + city;
+        }
+        return !type.isEmpty() ? type : city;
+    }
+
     //  根据Favorite表中的TargetType定位具体数据并读取
-    private List<Map<String, Object>> listByType(Long userId, String targetType) {
+    private List<FavoriteRecordVo> listByType(Long userId, String targetType) {
         List<Favorite> favs = favoriteMapper.selectList(new LambdaQueryWrapper<Favorite>()
                 .eq(Favorite::getUserId, userId)
                 .eq(Favorite::getTargetType, targetType)
                 .orderByDesc(Favorite::getCreateTime));
         return favs.stream().map(f -> {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("targetType", targetType);
-            m.put("targetId", String.valueOf(f.getTargetId()));
-            m.put("createTime", f.getCreateTime() == null ? null : f.getCreateTime().format(DT));
+            FavoriteRecordVo m = new FavoriteRecordVo();
+            m.setTargetType(targetType);
+            m.setTargetId(String.valueOf(f.getTargetId()));
+            m.setCreateTime(f.getCreateTime() == null ? null : f.getCreateTime().format(DT));
+            m.setId(String.valueOf(f.getTargetId()));
+            m.setFollowed(true);
             if ("artist".equals(targetType)) {
                 Artist a = artistMapper.selectById(f.getTargetId());
                 if (a != null) {
-                    m.put("name", a.getName());
-                    m.put("avatar", a.getAvatar());
+                    m.setName(a.getName());
+                    m.setAvatar(a.getAvatar());
+                    m.setIntro(a.getIntro());
+                    m.setType(a.getType());
+                    m.setCity(a.getCity());
+                    m.setDesc(artistListDesc(a));
                 }
             } else {
                 Venue v = venueMapper.selectById(f.getTargetId());
                 if (v != null) {
-                    m.put("name", v.getName());
-                    m.put("city", v.getCity());
+                    m.setName(v.getName());
+                    m.setCity(v.getCity());
+                    m.setAddress(v.getAddress());
+                    String city = v.getCity() == null ? "" : v.getCity().trim();
+                    String addr = v.getAddress() == null ? "" : v.getAddress().trim();
+                    if (!city.isEmpty() && !addr.isEmpty()) {
+                        m.setDesc(city + " · " + addr);
+                    } else {
+                        m.setDesc(!city.isEmpty() ? city : addr);
+                    }
                 }
             }
             return m;
         }).collect(Collectors.toList());
     }
 
-    // 看过的演出 -> 电子票已经核销过。
-    private List<Map<String, Object>> buildSeenList(Long userId) {
+    /**
+     * 看过：电子票已核销，且场次已到开演时间（now >= start_time）。
+     * 含「进行中」与「已结束」；未开演（当前时间早于 start_time）即使已核销也不进列表。
+     */
+    private List<FavoriteRecordVo> buildSeenList(Long userId) {
+        LocalDateTime now = LocalDateTime.now();
         List<ElectronicTicket> tickets = electronicTicketMapper.selectList(new LambdaQueryWrapper<ElectronicTicket>()
                 .eq(ElectronicTicket::getUserId, userId)
-                .eq(ElectronicTicket::getVerifyStatus, 1));
-        Map<Long, Map<String, Object>> byPerf = new LinkedHashMap<>(); // 存放演出对应信息
+                .eq(ElectronicTicket::getVerifyStatus, 1)
+                .orderByDesc(ElectronicTicket::getVerifyTime));
+        Map<Long, FavoriteRecordVo> byShow = new LinkedHashMap<>();
         for (ElectronicTicket t : tickets) {
-            Show show = showMapper.selectById(t.getShowId());
+            Long showId = t.getShowId();
+            if (showId == null || byShow.containsKey(showId)) {
+                continue;
+            }
+            Show show = showMapper.selectById(showId);
             if (show == null || show.getPerformanceId() == null) {
                 continue;
             }
-            Long perfId = show.getPerformanceId();
-            if (byPerf.containsKey(perfId)) {
+            if (show.getStartTime() == null || show.getStartTime().isAfter(now)) {
                 continue;
             }
+            Long perfId = show.getPerformanceId();
             Performance p = performanceMapper.selectById(perfId);
             if (p == null) {
                 continue;
             }
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("targetType", "show");
-            m.put("targetId", String.valueOf(perfId));
-            m.put("title", p.getTitle());
-            m.put("cover", p.getPoster());
-            m.put("verifyTime", t.getVerifyTime() == null ? null : t.getVerifyTime().format(DT));
+            Venue venue = show.getVenueId() == null ? null : venueMapper.selectById(show.getVenueId());
+            FavoriteRecordVo m = new FavoriteRecordVo();
+            m.setTargetType("show");
+            m.setTargetId(String.valueOf(perfId));
+            m.setPerformanceId(String.valueOf(perfId));
+            m.setShowId(String.valueOf(showId));
+            m.setOrderId(t.getOrderId() == null ? null : String.valueOf(t.getOrderId()));
+            m.setTitle(p.getTitle());
+            m.setCover(p.getPoster());
+            m.setVenueName(venue == null ? "" : venue.getName());
+            m.setShowTimeText(show.getStartTime() == null ? ""
+                    : show.getStartTime().format(DateTimeFormatter.ofPattern("M月d日 HH:mm")));
+            m.setVerifyTime(t.getVerifyTime() == null ? null : t.getVerifyTime().format(DT));
             boolean canComment = t.getOrderId() != null && !appCommentService.hasCommentForOrder(t.getOrderId());
-            m.put("canComment", canComment);
-            m.put("note", canComment ? "可写观演笔记" : "已观演");
-            byPerf.put(perfId, m);
+            m.setCanComment(canComment);
+            m.setNote(canComment ? "可写观演笔记" : "已观演");
+            byShow.put(showId, m);
         }
-        return new ArrayList<>(byPerf.values());
+        return new ArrayList<>(byShow.values());
     }
 }

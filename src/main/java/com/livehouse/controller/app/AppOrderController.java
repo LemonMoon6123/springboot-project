@@ -1,7 +1,9 @@
 package com.livehouse.controller.app;
 
+import com.livehouse.dto.app.OrderBatchDeleteRequest;
 import com.livehouse.dto.app.OrderCreateRequest;
 import com.livehouse.dto.app.OrderPreviewRequest;
+import com.livehouse.dto.app.OrderReasonRequest;
 import com.livehouse.entity.Result;
 import com.livehouse.entity.StatusCode;
 import com.livehouse.exception.StatusCodeException;
@@ -11,7 +13,6 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/app/order")
@@ -48,24 +49,25 @@ public class AppOrderController {
     }
 
     @PostMapping("/{orderId}/cancel")
-    public Result cancel(@PathVariable Long orderId, @RequestBody(required = false) Map<String, String> body) {
+    public Result cancel(@PathVariable Long orderId, @RequestBody(required = false) OrderReasonRequest body) {
         requireLogin();
-        String reason = body == null ? null : body.get("reason");
+        String reason = body == null ? null : body.getReason();
         appOrderService.cancel(UserHolder.getUser().getId(), orderId, reason);
         return Result.ok();
     }
 
     @PostMapping("/batch-delete")
-    public Result batchDelete(@RequestBody Map<String, List<Long>> body) {
+    public Result batchDelete(@RequestBody OrderBatchDeleteRequest body) {
         requireLogin();
-        appOrderService.batchDelete(UserHolder.getUser().getId(), body.get("orderIds"));
+        List<Long> orderIds = body == null ? null : body.getOrderIds();
+        appOrderService.batchDelete(UserHolder.getUser().getId(), orderIds);
         return Result.ok();
     }
 
     @PostMapping("/{orderId}/refund")
-    public Result refund(@PathVariable Long orderId, @RequestBody(required = false) Map<String, String> body) {
+    public Result refund(@PathVariable Long orderId, @RequestBody(required = false) OrderReasonRequest body) {
         requireLogin();
-        String reason = body == null ? null : body.get("reason");
+        String reason = body == null ? null : body.getReason();
         return Result.ok(appOrderService.refund(UserHolder.getUser().getId(), orderId, reason));
     }
 

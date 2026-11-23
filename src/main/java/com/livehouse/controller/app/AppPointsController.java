@@ -1,13 +1,15 @@
 package com.livehouse.controller.app;
 
 import com.livehouse.dto.UserDTO;
+import com.livehouse.dto.app.PointsExchangeRequest;
 import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
+import com.livehouse.exception.StatusCodeException;
 import com.livehouse.service.app.AppPointsService;
 import com.livehouse.utils.UserHolder;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/app/points")
@@ -31,10 +33,11 @@ public class AppPointsController {
     }
 
     @PostMapping("/exchange")
-    public Result exchange(@RequestBody Map<String, String> body) {
+    public Result exchange(@RequestBody PointsExchangeRequest body) {
         Long userId = UserHolder.getUser().getId();
-        Long goodsId = Long.parseLong(body.get("goodsId"));
-        String idempotentKey = body.get("idempotentKey");
-        return Result.ok(appPointsService.exchange(userId, goodsId, idempotentKey));
+        if (body == null || body.getGoodsId() == null) {
+            throw new StatusCodeException(StatusCode.PARAM_ERROR);
+        }
+        return Result.ok(appPointsService.exchange(userId, body.getGoodsId(), body.getIdempotentKey()));
     }
 }

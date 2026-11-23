@@ -2,18 +2,17 @@ package com.livehouse.service.app;
 
 import com.livehouse.dto.app.AudienceCreateRequest;
 import com.livehouse.dto.app.AudienceUpdateRequest;
-
-import java.util.Map;
+import com.livehouse.vo.app.audience.AudienceListVo;
 
 public interface AppAudienceService {
 
-    Map<String, Object> list(Long userId);
+    AudienceListVo list(Long userId);
 
-    Map<String, Object> create(Long userId, AudienceCreateRequest request);
+    AudienceListVo create(Long userId, AudienceCreateRequest request);
 
-    Map<String, Object> update(Long userId, Long id, AudienceUpdateRequest request);
+    AudienceListVo update(Long userId, Long id, AudienceUpdateRequest request);
 
-    Map<String, Object> delete(Long userId, Long id);
+    AudienceListVo delete(Long userId, Long id);
 
-    Map<String, Object> setDefault(Long userId, Long id);
+    AudienceListVo setDefault(Long userId, Long id);
 }

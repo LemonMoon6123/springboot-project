@@ -14,11 +14,11 @@ import com.livehouse.service.app.AppMessageService;
 import com.livehouse.service.app.AppUserCenterService;
 import com.livehouse.service.app.credit.CreditAccountService;
 import com.livehouse.service.app.credit.MemberLevelService;
+import com.livehouse.util.UserGender;
+import com.livehouse.vo.app.user.UserCenterVo;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 @Service
 public class AppUserCenterServiceImpl implements AppUserCenterService {
@@ -39,7 +39,7 @@ public class AppUserCenterServiceImpl implements AppUserCenterService {
     private AppMessageService appMessageService;
 
     @Override
-    public Map<String, Object> center(Long userId) {
+    public UserCenterVo center(Long userId) {
         User user = userService.getById(userId);
         UserInfo info = userInfoMapper.selectById(userId);
         MemberLevel level = memberLevelService.resolveMemberLevel(userId);
@@ -56,31 +56,33 @@ public class AppUserCenterServiceImpl implements AppUserCenterService {
         long favCount = favoriteMapper.selectCount(new LambdaQueryWrapper<Favorite>()
                 .eq(Favorite::getUserId, userId));
 
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("userId", String.valueOf(userId));
-        data.put("nickName", user == null ? "" : user.getNickName());
-        data.put("icon", user == null ? null : user.getIcon());
-        data.put("phone", maskPhone(user == null ? null : user.getPhone()));
-        data.put("city", info == null ? "" : info.getCity());
-        data.put("signature", info == null ? "" : info.getIntroduce());
-        data.put("genderText", genderText(info));
-        data.put("watchCount", info == null || info.getWatchCount() == null ? 0 : info.getWatchCount());
-        data.put("favoriteCount", favCount);
-        data.put("messageUnread", appMessageService.countUnread(userId));
-        data.put("credits", creditAccountService.sumAvailableCredits(userId));
-        data.put("totalCredits", totalCredits);
-        data.put("level", level.getLevel());
-        data.put("levelName", level.getName());
-        data.put("discountRate", level.getDiscountRate());
+        UserCenterVo data = new UserCenterVo();
+        data.setUserId(String.valueOf(userId));
+        data.setNickName(user == null ? "" : user.getNickName());
+        data.setIcon(user == null ? null : user.getIcon());
+        data.setPhone(maskPhone(user == null ? null : user.getPhone()));
+        data.setCity(info == null ? "" : info.getCity());
+        data.setSignature(info == null ? "" : info.getIntroduce());
+        data.setGender(info == null || info.getGender() == null ? 0 : info.getGender());
+        data.setGenderText(UserGender.text(info));
+        data.setBirthday(info == null || info.getBirthday() == null ? null : info.getBirthday().toString());
+        data.setWatchCount(info == null || info.getWatchCount() == null ? 0 : info.getWatchCount());
+        data.setFavoriteCount(favCount);
+        data.setMessageUnread((long) appMessageService.countUnread(userId));
+        data.setCredits(creditAccountService.sumAvailableCredits(userId));
+        data.setTotalCredits(totalCredits);
+        data.setLevel(level.getLevel());
+        data.setLevelName(level.getName());
+        data.setDiscountRate(level.getDiscountRate());
         if (next != null) {
-            data.put("nextLevelName", next.getName() + " Lv." + next.getLevel());
-            data.put("nextLevelNeed", Math.max(0, next.getMinTotalCredits() - totalCredits));
+            data.setNextLevelName(next.getName() + " Lv." + next.getLevel());
+            data.setNextLevelNeed(Math.max(0, next.getMinTotalCredits() - totalCredits));
         } else {
-            data.put("nextLevelName", null);
-            data.put("nextLevelNeed", 0);
+            data.setNextLevelName(null);
+            data.setNextLevelNeed(0);
         }
-        data.put("authStatus", authStatus);
-        data.put("authStatusText", authStatusText);
+        data.setAuthStatus(authStatus);
+        data.setAuthStatusText(authStatusText);
         return data;
     }
 
@@ -91,10 +93,4 @@ public class AppUserCenterServiceImpl implements AppUserCenterService {
         return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
     }
 
-    private static String genderText(UserInfo info) {
-        if (info == null || info.getGender() == null) {
-            return "";
-        }
-        return info.getGender() == 1 ? "女" : "男";
-    }
 }

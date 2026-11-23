@@ -1,10 +1,10 @@
 package com.livehouse.service.app;
 
-import java.util.Map;
+import com.livehouse.vo.app.message.MessageListVo;
 
 public interface AppMessageService {
 
-    Map<String, Object> list(Long userId, String type, int current, int size);
+    MessageListVo list(Long userId, String type, int current, int size);
 
     void readAll(Long userId);
 

@@ -1,7 +1,6 @@
 package com.livehouse.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.livehouse.dto.RefundMessage;
 import com.livehouse.entity.Result;
 import com.livehouse.entity.StatusCode;
 import com.livehouse.entity.ElectronicTicket;
@@ -10,10 +9,10 @@ import com.livehouse.entity.Show;
 import com.livehouse.entity.TicketOrder;
 import com.livehouse.mapper.TicketOrderMapper;
 import com.livehouse.service.IElectronicTicketService;
-import com.livehouse.service.IMessageProducerService;
 import com.livehouse.service.IRefundRecordService;
 import com.livehouse.service.IShowService;
 import com.livehouse.service.ITicketOrderService;
+import com.livehouse.service.TicketOrderStockService;
 import com.livehouse.utils.RedisIDGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,8 +20,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -48,10 +45,10 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
     private IRefundRecordService refundRecordService;
 
     @Autowired
-    private IMessageProducerService messageProducerService;
+    private RedisIDGenerator redisIDGenerator;
 
     @Autowired
-    private RedisIDGenerator redisIDGenerator;
+    private TicketOrderStockService ticketOrderStockService;
 
     @Override
     @Transactional
@@ -71,6 +68,8 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
         if (order.getOrderStatus() == 3) {
             return Result.fail(StatusCode.ORDER_STATUS_ILLEGAL, "订单已取消，无法支付");
         }
+
+        ticketOrderStockService.confirmDbStockOnPayment(order);
 
         // 2. 更新订单状态为已支付
         order.setPayStatus(1); // 已支付
@@ -154,20 +153,7 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
             return Result.fail(StatusCode.REFUND_SHOW_STARTED);
         }
 
-        // 5. 更新订单状态为已退票
-        order.setOrderStatus(4);
-        updateById(order);
-
-        // 6. 将订单下尚未核销的电子票标记为作废（verify_status: 2-已作废/退票）
-        List<ElectronicTicket> validTickets = tickets.stream()
-                .filter(t -> t.getVerifyStatus() != null && t.getVerifyStatus() == 0)
-                .peek(t -> t.setVerifyStatus(2))
-                .collect(java.util.stream.Collectors.toList());
-        if (!validTickets.isEmpty()) {
-            electronicTicketService.updateBatchById(validTickets);
-        }
-
-        // 7. 落库退票记录（本地消息表，状态=处理中），与上面的订单/电子票状态变更处于同一个事务
+        // 5. 落库退票记录（审核中），订单保持「已完成」直至管理员审核
         Long refundRecordId = redisIDGenerator.getId("refund_record");
         RefundRecord record = new RefundRecord();
         record.setId(refundRecordId);
@@ -182,25 +168,8 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
         record.setCreateTime(LocalDateTime.now());
         refundRecordService.save(record);
 
-        // 8. 事务提交后才发送MQ消息（严格遵守"本地消息表"模式的顺序：先落库，提交后再通知），
-        //    避免消息先于DB提交被消费者读到导致找不到记录；即使这里发送失败/丢失，
-        //    定时任务也会扫描到状态仍为PENDING的记录重新发送，不影响最终一致性。
-        RefundMessage refundMessage = new RefundMessage(
-                refundRecordId, orderId, userId, order.getTicketTypeId(), order.getQuantity());
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    messageProducerService.sendRefundMessage(refundMessage);
-                }
-            });
-        } else {
-            // 理论上不会走到这里（方法本身声明了@Transactional），保留作为兜底
-            messageProducerService.sendRefundMessage(refundMessage);
-        }
-
-        log.info("退票申请已受理，订单ID：{}，退票记录ID：{}", orderId, refundRecordId);
-        return Result.ok("退票申请已受理，库存与退款将在稍后处理完成");
+        log.info("退票申请已提交待审核，订单ID：{}，退票记录ID：{}", orderId, refundRecordId);
+        return Result.ok("退票申请已提交，请等待审核");
     }
 
     @Override
@@ -225,8 +194,8 @@ public class TicketOrderServiceImpl extends ServiceImpl<TicketOrderMapper, Ticke
         }
         switch (status) {
             case RefundRecord.STATUS_PENDING: return "处理中";
-            case RefundRecord.STATUS_SUCCESS: return "已完成";
-            case RefundRecord.STATUS_FAILED: return "处理失败，等待重试";
+            case RefundRecord.STATUS_SUCCESS: return "审核通过";
+            case RefundRecord.STATUS_FAILED: return "审核不通过";
             default: return "未知";
         }
     }

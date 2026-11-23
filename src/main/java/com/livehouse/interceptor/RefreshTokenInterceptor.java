@@ -1,6 +1,5 @@
 package com.livehouse.interceptor;
 
-import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.livehouse.dto.UserDTO;
 import com.livehouse.utils.UserHolder;
@@ -48,10 +47,21 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
             return true; // 用户信息过期，放行，由LoginInterceptor拦截
         }
         
-        // 5.保存用户信息到ThreadLocal
+        // 5.保存用户信息到ThreadLocal（Redis Hash 值均为 String，需显式转 Long）
         UserDTO userDTO = new UserDTO();
-        UserDTO userMessage = BeanUtil.fillBeanWithMap(userMap, userDTO, false);
-        UserHolder.saveUser(userMessage);
+        Object idVal = userMap.get("id");
+        if (idVal != null && StrUtil.isNotBlank(idVal.toString())) {
+            userDTO.setId(Long.parseLong(idVal.toString().trim()));
+        }
+        Object nick = userMap.get("nickName");
+        if (nick != null) {
+            userDTO.setNickName(nick.toString());
+        }
+        Object icon = userMap.get("icon");
+        if (icon != null) {
+            userDTO.setIcon(icon.toString());
+        }
+        UserHolder.saveUser(userDTO);
         
         // 6.刷新用户信息过期时间
         redisTemplate.expire(key, LOGIN_USER_TTL, TimeUnit.MINUTES);

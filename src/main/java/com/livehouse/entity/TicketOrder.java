@@ -144,6 +144,11 @@ public class TicketOrder implements Serializable {
     private String channel;
 
     /**
+     * MySQL left_stock 是否已扣减：0 否（仅 Redis 预占，支付后扣库），1 是（建单或支付已扣）
+     */
+    private Integer dbStockDeducted;
+
+    /**
      * 入场子状态：0待入场 1已核销
      */
     private Integer entryStatus;

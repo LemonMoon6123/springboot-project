@@ -1,12 +1,13 @@
 package com.livehouse.controller.app;
 
 import com.livehouse.entity.Result;
+import com.livehouse.entity.StatusCode;
+import com.livehouse.exception.StatusCodeException;
 import com.livehouse.service.app.AppShowService;
 import com.livehouse.utils.UserHolder;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/app/show")
@@ -20,8 +21,7 @@ public class AppShowController {
                        @RequestParam(required = false) String type,
                        @RequestParam(defaultValue = "1") int current,
                        @RequestParam(defaultValue = "10") int size) {
-        Map<String, Object> data = appShowService.home(city, type, current, size);
-        return Result.ok(data);
+        return Result.ok(appShowService.home(city, type, current, size));
     }
 
     @GetMapping("/list")
@@ -38,10 +38,27 @@ public class AppShowController {
     }
 
     @GetMapping("/{performanceId}")
-    public Result detail(@PathVariable Long performanceId,
-                         @RequestParam(required = false) Long showId,
+    public Result detail(@PathVariable String performanceId,
+                         @RequestParam(required = false) String showId,
                          @RequestParam(required = false, defaultValue = "false") boolean noticesAll) {
         Long userId = UserHolder.getUser() == null ? null : UserHolder.getUser().getId();
-        return Result.ok(appShowService.detail(performanceId, showId, noticesAll, userId));
+        Long pid = parsePositiveLong(performanceId, "演出");
+        Long sid = showId == null || showId.isEmpty() ? null : parsePositiveLong(showId, "场次");
+        return Result.ok(appShowService.detail(pid, sid, noticesAll, userId));
+    }
+
+    private static Long parsePositiveLong(String raw, String label) {
+        if (raw == null) {
+            throw new StatusCodeException(StatusCode.PARAM_ERROR, label + "ID无效");
+        }
+        String s = raw.trim();
+        if (s.isEmpty() || "undefined".equalsIgnoreCase(s) || "null".equalsIgnoreCase(s)) {
+            throw new StatusCodeException(StatusCode.PARAM_ERROR, label + "ID无效");
+        }
+        try {
+            return Long.parseLong(s);
+        } catch (NumberFormatException e) {
+            throw new StatusCodeException(StatusCode.PARAM_ERROR, label + "ID无效");
+        }
     }
 }

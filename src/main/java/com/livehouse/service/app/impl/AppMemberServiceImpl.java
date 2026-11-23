@@ -1,6 +1,7 @@
 package com.livehouse.service.app.impl;
 
 import cn.hutool.json.JSONArray;
+import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.livehouse.entity.MemberLevel;
@@ -8,6 +9,12 @@ import com.livehouse.service.app.AppMemberService;
 import com.livehouse.service.app.credit.CreditAccountService;
 import com.livehouse.service.app.credit.MemberLevelService;
 import com.livehouse.mapper.MemberLevelMapper;
+import com.livehouse.vo.app.member.MemberBenefitVo;
+import com.livehouse.vo.app.member.MemberInfoVo;
+import com.livehouse.vo.app.member.MemberLevelCardVo;
+import com.livehouse.vo.app.member.MemberLevelProgressVo;
+import com.livehouse.vo.app.member.MemberPerkVo;
+import com.livehouse.vo.app.member.MemberPointsSummaryVo;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -26,7 +33,7 @@ public class AppMemberServiceImpl implements AppMemberService {
     private CreditAccountService creditAccountService;
 
     @Override
-    public Map<String, Object> memberInfo(Long userId) {
+    public MemberInfoVo memberInfo(Long userId) {
         int totalCredits = memberLevelService.sumTotalCredits(userId);
         MemberLevel current = memberLevelService.resolveMemberLevel(userId);
         MemberLevel next = memberLevelService.nextLevel(current);
@@ -35,63 +42,56 @@ public class AppMemberServiceImpl implements AppMemberService {
                 .eq(MemberLevel::getStatus, 1)
                 .orderByAsc(MemberLevel::getLevel));
 
-        List<Map<String, Object>> levels = new ArrayList<>();
+        List<MemberLevelCardVo> levels = new ArrayList<>();
         for (MemberLevel lv : all) {
-            Map<String, Object> card = new LinkedHashMap<>();
+            MemberLevelCardVo card = new MemberLevelCardVo();
             boolean isCurrent = Objects.equals(lv.getLevel(), current.getLevel());
             boolean passed = totalCredits >= lv.getMinTotalCredits();
-            card.put("level", lv.getLevel());
-            card.put("name", lv.getLevel() == 0 ? "普通用户" : lv.getName());
-            card.put("tag", buildTag(lv, next, totalCredits, isCurrent));
-            card.put("light", passed || isCurrent);
-            card.put("cur", isCurrent);
-            card.put("discountText", discountText(lv.getDiscountRate()));
-            card.put("needText", lv.getMinTotalCredits() == 0 ? "无门槛" : String.valueOf(lv.getMinTotalCredits()));
-            card.put("minTotalCredits", lv.getMinTotalCredits());
-            card.put("discountRate", lv.getDiscountRate());
-            card.put("priorityMinutes", lv.getPriorityMinutes());
-            card.put("progress", progress(totalCredits, lv));
-            card.put("note", buildNote(lv, current, totalCredits));
-            card.put("perks", parsePerks(lv.getBenefitsJson()));
+            card.setLevel(lv.getLevel());
+            card.setName(lv.getLevel() == 0 ? "普通用户" : lv.getName());
+            card.setTag(buildTag(lv, next, totalCredits, isCurrent));
+            card.setLight(passed || isCurrent);
+            card.setCur(isCurrent);
+            card.setDiscountText(discountText(lv.getDiscountRate()));
+            card.setNeedText(lv.getMinTotalCredits() == 0 ? "无门槛" : String.valueOf(lv.getMinTotalCredits()));
+            card.setMinTotalCredits(lv.getMinTotalCredits());
+            card.setDiscountRate(lv.getDiscountRate());
+            card.setPriorityMinutes(lv.getPriorityMinutes());
+            card.setProgress(progress(totalCredits, lv));
+            card.setNote(buildNote(lv, current, totalCredits));
+            card.setPerks(parsePerks(lv.getBenefitsJson()));
             levels.add(card);
         }
 
-        Map<String, Object> points = new LinkedHashMap<>();
+        MemberPointsSummaryVo points = new MemberPointsSummaryVo();
         int available = creditAccountService.sumAvailableCredits(userId);
-        int expiring = creditAccountService.expiringSoon(userId);
-        points.put("available", available);
-        points.put("total", totalCredits);
-        points.put("monthGain", creditAccountService.monthGain(userId));
-        points.put("expiringSoon", expiring);
-        if (expiring > 0) {
-            points.put("expiringText", expiring + " 积分将于未来三个月内过期");
-        } else {
-            points.put("expiringText", null);
-        }
+        points.setAvailable(available);
+        points.setTotal(totalCredits);
+        points.setMonthGain(creditAccountService.monthGain(userId));
         if (next != null) {
-            points.put("nextLevelName", next.getName() + " Lv." + next.getLevel());
-            points.put("nextLevelNeed", Math.max(0, next.getMinTotalCredits() - totalCredits));
+            points.setNextLevelName(next.getName() + " Lv." + next.getLevel());
+            points.setNextLevelNeed(Math.max(0, next.getMinTotalCredits() - totalCredits));
         } else {
-            points.put("nextLevelName", null);
-            points.put("nextLevelNeed", 0);
+            points.setNextLevelName(null);
+            points.setNextLevelNeed(0);
         }
 
-        List<Map<String, Object>> benefits = new ArrayList<>();
+        List<MemberBenefitVo> benefits = new ArrayList<>();
         if (current.getPriorityMinutes() != null && current.getPriorityMinutes() > 0) {
-            Map<String, Object> b = new LinkedHashMap<>();
-            b.put("icon", "bolt");
-            b.put("name", "优先购票");
-            b.put("desc", "热门演出提前 " + current.getPriorityMinutes() + " 分钟开售");
+            MemberBenefitVo b = new MemberBenefitVo();
+            b.setIcon("bolt");
+            b.setName("优先购票");
+            b.setDesc("热门演出提前 " + current.getPriorityMinutes() + " 分钟开售");
             benefits.add(b);
         }
 
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("currentLevel", current.getLevel());
-        data.put("currentLevelName", current.getName());
-        data.put("totalCredits", totalCredits);
-        data.put("levels", levels);
-        data.put("benefits", benefits);
-        data.put("points", points);
+        MemberInfoVo data = new MemberInfoVo();
+        data.setCurrentLevel(current.getLevel());
+        data.setCurrentLevelName(current.getName());
+        data.setTotalCredits(totalCredits);
+        data.setLevels(levels);
+        data.setBenefits(benefits);
+        data.setPoints(points);
         return data;
     }
 
@@ -102,13 +102,13 @@ public class AppMemberServiceImpl implements AppMemberService {
         return rate.multiply(BigDecimal.TEN).stripTrailingZeros().toPlainString() + " 折";
     }
 
-    private static Map<String, Object> progress(int total, MemberLevel lv) {
+    private static MemberLevelProgressVo progress(int total, MemberLevel lv) {
         int target = lv.getMinTotalCredits() == null ? 0 : lv.getMinTotalCredits();
         int percent = target <= 0 ? 100 : Math.min(100, total * 100 / target);
-        Map<String, Object> p = new LinkedHashMap<>();
-        p.put("current", total);
-        p.put("target", target);
-        p.put("percent", percent);
+        MemberLevelProgressVo p = new MemberLevelProgressVo();
+        p.setCurrent(total);
+        p.setTarget(target);
+        p.setPercent(percent);
         return p;
     }
 
@@ -133,19 +133,26 @@ public class AppMemberServiceImpl implements AppMemberService {
         return "还差 " + (lv.getMinTotalCredits() - total) + " 积分解锁该等级";
     }
 
-  private static List<Map<String, Object>> parsePerks(String json) {
-    if (json == null || json.isEmpty()) {
-      return Collections.emptyList();
+    private static List<MemberPerkVo> parsePerks(String json) {
+        if (json == null || json.isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            JSONArray arr = JSONUtil.parseArray(json);
+            List<MemberPerkVo> perks = new ArrayList<>();
+            for (Object o : arr) {
+                JSONObject obj = JSONUtil.parseObj(o);
+                MemberPerkVo p = new MemberPerkVo();
+                p.setIcon(obj.getStr("icon"));
+                p.setName(obj.getStr("name"));
+                p.setDesc(obj.getStr("desc"));
+                p.setTitle(obj.getStr("title"));
+                p.setText(obj.getStr("text"));
+                perks.add(p);
+            }
+            return perks;
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
     }
-    try {
-      JSONArray arr = JSONUtil.parseArray(json);
-      List<Map<String, Object>> perks = new ArrayList<>();
-      for (Object o : arr) {
-        perks.add(JSONUtil.parseObj(o));
-      }
-      return perks;
-    } catch (Exception e) {
-      return Collections.emptyList();
-    }
-  }
 }

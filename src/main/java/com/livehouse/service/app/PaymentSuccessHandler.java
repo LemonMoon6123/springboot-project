@@ -9,6 +9,7 @@ import com.livehouse.entity.StatusCode;
 import com.livehouse.mapper.OrderAudienceMapper;
 import com.livehouse.service.IShowService;
 import com.livehouse.service.ITicketOrderService;
+import com.livehouse.service.TicketOrderStockService;
 import com.livehouse.service.app.AppMessageService;
 import com.livehouse.utils.RedisIDGenerator;
 import com.livehouse.utils.TicketEncryptionUtils;
@@ -53,6 +54,9 @@ public class PaymentSuccessHandler extends ServiceImpl<ElectronicTicketMapper, E
     @Autowired
     private AppMessageService appMessageService;
 
+    @Autowired
+    private TicketOrderStockService ticketOrderStockService;
+
     @Transactional
     public void handlePaymentSuccess(Long orderId) {
         TicketOrder order = ticketOrderService.getById(orderId);
@@ -66,6 +70,8 @@ public class PaymentSuccessHandler extends ServiceImpl<ElectronicTicketMapper, E
         if (order.getOrderStatus() == null || order.getOrderStatus() != 1) {
             throw new StatusCodeException(StatusCode.ORDER_STATUS_ILLEGAL);
         }
+
+        ticketOrderStockService.confirmDbStockOnPayment(order);
 
         order.setPayStatus(1);
         order.setOrderStatus(2);
@@ -110,8 +116,8 @@ public class PaymentSuccessHandler extends ServiceImpl<ElectronicTicketMapper, E
             String originalTicketCode = "ET" + ticketId;
             String encrypted = ticketEncryptionUtils.encryptTicketCode(originalTicketCode);
 
-            String shortCode = generateUniqueShortCode(order.getShowId());
             String displayCode = formatDisplayCode(ticketId);
+            String shortCode = assignShortCode(order.getShowId(), displayCode);
 
             ElectronicTicket ticket = new ElectronicTicket();
             ticket.setId(ticketId);
@@ -124,6 +130,7 @@ public class PaymentSuccessHandler extends ServiceImpl<ElectronicTicketMapper, E
             ticket.setTicketTypeId(order.getTicketTypeId());
             ticket.setVerifyStatus(0);
             ticket.setGate(defaultGate);
+            ticket.setSeatInfo(ElectronicTicket.DEFAULT_SEAT_INFO);
             ticket.setCreateTime(LocalDateTime.now());
             if (oa != null) {
                 ticket.setAudienceId(oa.getAudienceId());
@@ -135,6 +142,19 @@ public class PaymentSuccessHandler extends ServiceImpl<ElectronicTicketMapper, E
             tickets.add(ticket);
         }
         saveBatch(tickets);
+    }
+
+    /** 优先与展示码后 6 位一致（方便手输），冲突时再随机 */
+    private String assignShortCode(Long showId, String displayCode) {
+        String digits = displayCode == null ? "" : displayCode.replace(" ", "");
+        if (digits.length() >= 6) {
+            String tail = digits.substring(digits.length() - 6);
+            long cnt = lambdaQuery().eq(ElectronicTicket::getShowId, showId).eq(ElectronicTicket::getShortCode, tail).count();
+            if (cnt == 0) {
+                return tail;
+            }
+        }
+        return generateUniqueShortCode(showId);
     }
 
     // 随即碰撞20次生成固定6位随机数

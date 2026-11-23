@@ -58,8 +58,12 @@ public class RefundConsumer {
             return;
         }
 
-        if (record.getStatus() != null && record.getStatus() == RefundRecord.STATUS_SUCCESS) {
-            log.info("退票记录已处理完成，幂等跳过，退票记录ID：{}", record.getId());
+        if (record.getFinishTime() != null) {
+            log.info("退票库存已回补完成，幂等跳过，退票记录ID：{}", record.getId());
+            return;
+        }
+        if (record.getStatus() == null || record.getStatus() != RefundRecord.STATUS_SUCCESS) {
+            log.info("退票记录非审核通过状态，跳过库存回补，退票记录ID：{}，status={}", record.getId(), record.getStatus());
             return;
         }
 
@@ -92,18 +96,12 @@ public class RefundConsumer {
                 log.info("数据库库存已回补过，跳过重复回补，退票记录ID：{}", record.getId());
             }
 
-            // 3. 更新退票记录为已完成
-            record.setStatus(RefundRecord.STATUS_SUCCESS);
             record.setFinishTime(LocalDateTime.now());
             refundRecordService.updateById(record);
 
             log.info("退票库存回补完成，退票记录ID：{}，订单ID：{}", record.getId(), message.getOrderId());
         } catch (Exception e) {
-            log.error("退票库存回补失败，退票记录ID：{}，订单ID：{}", record.getId(), message.getOrderId(), e);
-            record.setStatus(RefundRecord.STATUS_FAILED);
-            refundRecordService.updateById(record);
-            // 不再往外抛异常触发框架重试：状态已经落库为FAILED，交由定时任务统一重新发送，
-            // 避免这里的异常导致@Transactional连record.setStatus的更新一起回滚。
+            log.error("退票库存回补失败，退票记录ID：{}，订单ID：{}，将由对账任务重试", record.getId(), message.getOrderId(), e);
         }
     }
 }

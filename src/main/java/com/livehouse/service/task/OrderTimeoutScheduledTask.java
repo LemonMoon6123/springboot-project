@@ -3,8 +3,7 @@ package com.livehouse.service.task;
 import com.livehouse.config.LivehouseProperties;
 import com.livehouse.entity.TicketOrder;
 import com.livehouse.service.ITicketOrderService;
-import com.livehouse.service.ITicketTypeService;
-import com.livehouse.utils.SeckillScriptExecutor;
+import com.livehouse.service.TicketOrderStockService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -26,10 +25,7 @@ public class OrderTimeoutScheduledTask {
     private ITicketOrderService ticketOrderService;
 
     @Autowired
-    private ITicketTypeService ticketTypeService;
-
-    @Autowired
-    private SeckillScriptExecutor seckillScriptExecutor;
+    private TicketOrderStockService ticketOrderStockService;
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
@@ -91,44 +87,19 @@ public class OrderTimeoutScheduledTask {
             return;
         }
 
-        // 恢复逻辑与订单超时恢复逻辑基本一致，只是新增逻辑字段辅助
-        boolean dbRestored = false;
         try {
-            boolean dbRestoreSuccess = ticketTypeService.update()
-                    .setSql("left_stock = left_stock + " + order.getQuantity())
-                    .eq("id", order.getTicketTypeId())
-                    .update();
-
-            if (!dbRestoreSuccess) {
-                throw new IllegalStateException("数据库库存归还失败，订单ID：" + order.getId());
-            }
-            dbRestored = true;
-
-            Long result = seckillScriptExecutor.executeRestoreStock(
-                    order.getTicketTypeId(),
-                    order.getUserId(),
-                    order.getQuantity()
-            );
-
-            if (result == null || result != 0L) {
-                log.error("Redis库存归还失败，订单ID：{}，结果码：{}", order.getId(), result);
-                Integer dbLeft = ticketTypeService.getById(order.getTicketTypeId()).getLeftStock();
-                seckillScriptExecutor.syncRedisStockFromDb(order.getTicketTypeId(), dbLeft);
-            }
+            ticketOrderStockService.releaseReservedStock(order);
 
             String userOrderStatusKey = "user:order:status:" +
                     order.getUserId() + ":" + order.getTicketTypeId();
             stringRedisTemplate.delete(userOrderStatusKey);
         } catch (Exception e) {
-            // DB归还失败就回滚订单状态
-            if (!dbRestored) {
-                ticketOrderService.update()
-                        .set("orderStatus", 1)
-                        .eq("id", order.getId())
-                        .eq("orderStatus", 3)
-                        .eq("payStatus", 0)
-                        .update();
-            }
+            ticketOrderService.update()
+                    .set("orderStatus", 1)
+                    .eq("id", order.getId())
+                    .eq("orderStatus", 3)
+                    .eq("payStatus", 0)
+                    .update();
             throw e;
         }
 

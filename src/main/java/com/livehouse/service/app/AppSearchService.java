@@ -1,9 +1,14 @@
 package com.livehouse.service.app;
 
-import java.util.Map;
+import com.livehouse.vo.app.search.HotArtistVo;
+import com.livehouse.vo.app.search.SearchResultVo;
+
+import java.util.List;
 
 public interface AppSearchService {
 
-    Map<String, Object> search(String keyword, String city, String time, Long artistId, String price,
-                               Integer hasTicket, String sort, int current, int size, Long userId);
+    SearchResultVo search(String keyword, String city, String time, Long artistId, String price,
+                          Integer hasTicket, String sort, int current, int size, Long userId);
+
+    List<HotArtistVo> hotArtists(int limit);
 }

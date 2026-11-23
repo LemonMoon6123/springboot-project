@@ -1,5 +1,6 @@
 package com.livehouse.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -38,6 +39,11 @@ public class Show implements Serializable {
     private Long venueId;
 
     /**
+     * 艺人ID（表单下拉选择，保存时同步冗余 {@link #artist}）
+     */
+    private Long artistId;
+
+    /**
      * 艺人/乐队
      */
     private String artist;
@@ -48,8 +54,9 @@ public class Show implements Serializable {
     private String title;
 
     /**
-     * 演出类型
+     * 已废弃：演出类型统一取自所属演出项目 {@code tb_performance.type}
      */
+    @TableField(exist = false)
     private String type;
 
     /**

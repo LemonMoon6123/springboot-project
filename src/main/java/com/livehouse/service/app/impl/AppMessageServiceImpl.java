@@ -4,14 +4,15 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.livehouse.entity.Message;
 import com.livehouse.mapper.MessageMapper;
 import com.livehouse.service.app.AppMessageService;
+import com.livehouse.vo.app.message.MessageItemVo;
+import com.livehouse.vo.app.message.MessageListVo;
+import com.livehouse.vo.app.message.MessageUnreadVo;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -23,7 +24,7 @@ public class AppMessageServiceImpl implements AppMessageService {
     private MessageMapper messageMapper;
 
     @Override
-    public Map<String, Object> list(Long userId, String type, int current, int size) {
+    public MessageListVo list(Long userId, String type, int current, int size) {
         size = Math.min(Math.max(size, 1), 50);
         current = Math.max(current, 1);
         LambdaQueryWrapper<Message> w = new LambdaQueryWrapper<Message>()
@@ -34,15 +35,15 @@ public class AppMessageServiceImpl implements AppMessageService {
         }
         long total = messageMapper.selectCount(w);
         List<Message> rows = messageMapper.selectList(w.last("LIMIT " + (current - 1) * size + "," + size));
-        List<Map<String, Object>> records = rows.stream().map(this::toRecord).collect(Collectors.toList());
+        List<MessageItemVo> records = rows.stream().map(this::toRecord).collect(Collectors.toList());
 
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("records", records);
-        data.put("total", total);
-        data.put("current", current);
-        data.put("size", size);
-        data.put("pages", total == 0 ? 0 : (total + size - 1) / size);
-        data.put("unread", unreadBreakdown(userId));
+        MessageListVo data = new MessageListVo();
+        data.setRecords(records);
+        data.setTotal(total);
+        data.setCurrent(current);
+        data.setSize(size);
+        data.setPages(total == 0 ? 0 : (total + size - 1) / size);
+        data.setUnread(unreadBreakdown(userId));
         return data;
     }
 
@@ -80,28 +81,28 @@ public class AppMessageServiceImpl implements AppMessageService {
         messageMapper.insert(m);
     }
 
-    private Map<String, Object> unreadBreakdown(Long userId) {
+    private MessageUnreadVo unreadBreakdown(Long userId) {
         long remind = messageMapper.selectCount(new LambdaQueryWrapper<Message>()
                 .eq(Message::getUserId, userId).eq(Message::getIsRead, 0).eq(Message::getType, "remind"));
         long order = messageMapper.selectCount(new LambdaQueryWrapper<Message>()
                 .eq(Message::getUserId, userId).eq(Message::getIsRead, 0).eq(Message::getType, "order"));
-        Map<String, Object> u = new LinkedHashMap<>();
-        u.put("remind", remind);
-        u.put("order", order);
-        u.put("total", remind + order);
+        MessageUnreadVo u = new MessageUnreadVo();
+        u.setRemind(remind);
+        u.setOrder(order);
+        u.setTotal(remind + order);
         return u;
     }
 
-    private Map<String, Object> toRecord(Message m) {
-        Map<String, Object> r = new LinkedHashMap<>();
-        r.put("id", String.valueOf(m.getId()));
-        r.put("type", m.getType());
-        r.put("title", m.getTitle());
-        r.put("time", m.getCreateTime() == null ? null : m.getCreateTime().format(DT));
-        r.put("content", m.getContent());
-        r.put("bizType", m.getBizType());
-        r.put("bizId", m.getBizId());
-        r.put("unread", m.getIsRead() == null || m.getIsRead() == 0);
+    private MessageItemVo toRecord(Message m) {
+        MessageItemVo r = new MessageItemVo();
+        r.setId(String.valueOf(m.getId()));
+        r.setType(m.getType());
+        r.setTitle(m.getTitle());
+        r.setTime(m.getCreateTime() == null ? null : m.getCreateTime().format(DT));
+        r.setContent(m.getContent());
+        r.setBizType(m.getBizType());
+        r.setBizId(m.getBizId());
+        r.setUnread(m.getIsRead() == null || m.getIsRead() == 0);
         return r;
     }
 }

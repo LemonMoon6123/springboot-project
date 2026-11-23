@@ -14,6 +14,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import com.livehouse.util.PerformanceDetailImages;
+
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -64,13 +66,21 @@ public class UploadController {
         return Paths.get(System.getProperty("user.dir")).resolve(path).normalize();
     }
 
+    private static final Set<String> ALLOWED_FOLDERS = new HashSet<>(Arrays.asList(
+            "avatars", "show", "shows", "poster", "comment"
+    ));
+
     private String getSafeFolder(String folder) {
         if (folder == null || folder.trim().isEmpty()) {
             return "";
         }
-        String value = folder.trim().toLowerCase();
-        if ("avatars".equals(value) || "shows".equals(value)) {
-            return value;
+        String value = folder.trim().replace('\\', '/');
+        String lower = value.toLowerCase();
+        if (ALLOWED_FOLDERS.contains(lower)) {
+            return lower;
+        }
+        if (PerformanceDetailImages.isAllowedUploadFolder(lower)) {
+            return lower;
         }
         return "";
     }

@@ -10,7 +10,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -19,8 +18,7 @@ import java.util.List;
  * 退票申请成功落库后（状态=处理中），会在DB事务提交后异步发送一条MQ消息触发库存回补；
  * 但消息发送本身不保证一定成功（网络抖动、Broker短暂不可用等），一旦丢失，
  * 单靠"发一次"是不够的。这个定时任务定期扫描：
- *   - 状态仍为"处理中"但创建超过5分钟（大概率消息丢失或还没被消费）
- *   - 状态为"处理失败"（消费者处理时抛出异常）
+ *   - 状态为"审核通过"但 finish_time 仍为空（库存回补消息丢失或消费失败）
  * 的记录，重新发送一次退票消息，触发消费者重新尝试。
  *
  * 之所以不给退票队列配死信队列，是因为这张退票记录表本身就是可靠的状态存储——
@@ -45,7 +43,8 @@ public class RefundReconcileScheduledTask {
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(5);
 
         List<RefundRecord> stuckRecords = refundRecordService.lambdaQuery()
-                .in(RefundRecord::getStatus, Arrays.asList(RefundRecord.STATUS_PENDING, RefundRecord.STATUS_FAILED))
+                .eq(RefundRecord::getStatus, RefundRecord.STATUS_SUCCESS)
+                .isNull(RefundRecord::getFinishTime)
                 .lt(RefundRecord::getCreateTime, threshold)
                 .list();
 

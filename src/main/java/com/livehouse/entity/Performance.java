@@ -8,7 +8,6 @@ import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
 
 import java.io.Serializable;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -33,18 +32,17 @@ public class Performance implements Serializable {
 
     private String type;
 
-    private String city;
-
     private String poster;
 
     private String posterTag;
 
     private String description;
 
+    /** 详情长图 URL 列表（JSON 数组字符串，最多 10 张） */
+    private String detailImages;
+
     /** 是否实名制：0否 1是 */
     private Integer isRealName;
-
-    private BigDecimal minPrice;
 
     private Integer sessionCount;
 

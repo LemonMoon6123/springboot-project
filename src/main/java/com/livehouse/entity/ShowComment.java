@@ -14,7 +14,7 @@ public class ShowComment implements Serializable {
 
   @TableId(type = IdType.AUTO)
   private Long id;
-  private Long performanceId;
+  private Long showId;
   private Long orderId;
   private Long userId;
   private String userName;

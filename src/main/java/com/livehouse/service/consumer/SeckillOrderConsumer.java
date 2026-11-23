@@ -1,5 +1,6 @@
 package com.livehouse.service.consumer;
 
+import com.livehouse.config.LivehouseProperties;
 import com.livehouse.config.RabbitMQConfig;
 import com.livehouse.dto.OrderTimeoutMessage;
 import com.livehouse.dto.SeckillOrderMessage;
@@ -18,6 +19,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * 秒杀订单消费者
@@ -74,6 +78,9 @@ public class SeckillOrderConsumer {
     @Autowired
     private SeckillScriptExecutor seckillScriptExecutor;
 
+    @Autowired
+    private LivehouseProperties livehouseProperties;
+
     @RabbitListener(queues = RabbitMQConfig.SECKILL_QUEUE)
     @Transactional
     public void handleSeckillOrder(SeckillOrderMessage message) {
@@ -100,17 +107,39 @@ public class SeckillOrderConsumer {
         // （Main Task）创建订单，扣减库存
         try {
             Long orderId = redisIDGenerator.getId("ticket_order");
+            LocalDateTime now = LocalDateTime.now();
+            int timeoutMin = livehouseProperties.getOrder().getPayTimeoutMinutes();
+            BigDecimal total = message.getAmount();
+            if (total == null && message.getPrice() != null && message.getQuantity() != null) {
+                total = message.getPrice().multiply(BigDecimal.valueOf(message.getQuantity()));
+            }
+            if (total == null) {
+                total = BigDecimal.ZERO;
+            }
 
             TicketOrder order = new TicketOrder();
             order.setId(orderId);
+            order.setOrderNo(String.valueOf(orderId));
             order.setUserId(message.getUserId());
             order.setShowId(message.getShowId());
+            order.setSessionId(message.getShowId());
             order.setTicketTypeId(message.getTicketTypeId());
             order.setQuantity(message.getQuantity());
-            order.setAmount(message.getAmount());
+            order.setTotalAmount(total);
+            order.setServiceFee(BigDecimal.ZERO);
+            order.setMemberDiscountAmount(BigDecimal.ZERO);
+            order.setDiscountAmount(BigDecimal.ZERO);
+            order.setPayAmount(total);
+            order.setAmount(total);
             order.setPayStatus(0);
             order.setOrderStatus(1);
+            order.setExpireTime(now.plusMinutes(timeoutMin));
+            order.setCreateTime(now);
+            order.setUpdateTime(now);
+            order.setDeleted(0);
+            order.setChannel("seckill");
             order.setRequestId(requestId);
+            order.setDbStockDeducted(1);
 
             ticketOrderService.save(order); // 订单入库
 

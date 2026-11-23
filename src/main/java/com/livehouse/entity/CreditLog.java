@@ -16,12 +16,9 @@ public class CreditLog implements Serializable {
   private Long id;
   private Long userId;
   private Integer changeAmount;
-  private Integer balance;
   private String type;
-  /** 0待发放 1已发放 2已过期 */
+  /** 0无效 1有效 */
   private Integer status;
-  private LocalDateTime releaseTime;
-  private LocalDateTime expireTime;
   private String bizId;
   private String remark;
   private LocalDateTime createTime;

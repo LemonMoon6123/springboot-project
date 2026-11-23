@@ -1,7 +1,8 @@
 package com.livehouse.service.app;
 
-import java.util.Map;
+import com.livehouse.vo.app.user.UserCenterVo;
 
 public interface AppUserCenterService {
-    Map<String, Object> center(Long userId);
+
+    UserCenterVo center(Long userId);
 }

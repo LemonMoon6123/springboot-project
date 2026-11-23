@@ -4,8 +4,7 @@ import com.livehouse.config.RabbitMQConfig;
 import com.livehouse.dto.OrderTimeoutMessage;
 import com.livehouse.entity.TicketOrder;
 import com.livehouse.service.ITicketOrderService;
-import com.livehouse.service.ITicketTypeService;
-import com.livehouse.utils.SeckillScriptExecutor;
+import com.livehouse.service.TicketOrderStockService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,10 +34,7 @@ public class OrderTimeoutConsumer {
     private ITicketOrderService ticketOrderService;
 
     @Autowired
-    private ITicketTypeService ticketTypeService;
-
-    @Autowired
-    private SeckillScriptExecutor seckillScriptExecutor;
+    private TicketOrderStockService ticketOrderStockService;
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
@@ -86,31 +82,7 @@ public class OrderTimeoutConsumer {
                 return;
             }
 
-            // 1. 先归还数据库库存
-            boolean dbRestoreSuccess = ticketTypeService.update()
-                    .setSql("left_stock = left_stock + " + message.getQuantity())
-                    .eq("id", message.getTicketTypeId())
-                    .update();
-
-            if (!dbRestoreSuccess) {
-                // MySQL 没还成功就不要还 Redis，否则必然虚高；抛出触发重试
-                throw new IllegalStateException("数据库库存归还失败，票种ID：" + message.getTicketTypeId());
-            }
-
-            // 2. 再归还 Redis 库存 + 用户限购计数
-            Long result = seckillScriptExecutor.executeRestoreStock(
-                    message.getTicketTypeId(),
-                    message.getUserId(),
-                    message.getQuantity()
-            );
-
-            // 如果redis库存回滚失败了，那么就直接同步mysql的库存数据
-            if (result == null || result != 0L) {
-                log.error("Redis库存归还失败，订单ID：{}，结果码：{}", message.getOrderId(), result);
-                // MySQL 已还：将 Redis 校准到当前 DB，避免只还了一边
-                Integer dbLeft = ticketTypeService.getById(message.getTicketTypeId()).getLeftStock();
-                seckillScriptExecutor.syncRedisStockFromDb(message.getTicketTypeId(), dbLeft);
-            }
+            ticketOrderStockService.releaseReservedStock(order);
 
             // 清除用户对该票的待支付状态，一直没支付订单都超时了就清除该状态。
             String userOrderStatusKey = "user:order:status:" +

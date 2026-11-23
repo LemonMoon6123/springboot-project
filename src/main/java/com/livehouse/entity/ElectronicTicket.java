@@ -20,6 +20,9 @@ public class ElectronicTicket implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    /** 当前无选座，统一站席 */
+    public static final String DEFAULT_SEAT_INFO = "站票";
+
     /**
      * 电子票号
      */

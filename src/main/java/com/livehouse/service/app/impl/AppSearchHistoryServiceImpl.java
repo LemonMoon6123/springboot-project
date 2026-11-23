@@ -4,20 +4,16 @@ import cn.hutool.core.util.StrUtil;
 import com.livehouse.entity.StatusCode;
 import com.livehouse.exception.StatusCodeException;
 import com.livehouse.service.app.AppSearchHistoryService;
+import com.livehouse.vo.app.search.SearchHistoryAddVo;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-/**
- * 搜索历史：登录用户存Redis，未登录用户存LocalStorage。
- */
 @Service
 public class AppSearchHistoryServiceImpl implements AppSearchHistoryService {
 
@@ -41,7 +37,7 @@ public class AppSearchHistoryServiceImpl implements AppSearchHistoryService {
     }
 
     @Override
-    public Map<String, Object> add(Long userId, String keyword) {
+    public SearchHistoryAddVo add(Long userId, String keyword) {
         if (userId == null) {
             throw new StatusCodeException(StatusCode.UNAUTHORIZED);
         }
@@ -52,10 +48,10 @@ public class AppSearchHistoryServiceImpl implements AppSearchHistoryService {
         String k = key(userId);
         stringRedisTemplate.opsForList().remove(k, 0, w);
         stringRedisTemplate.opsForList().leftPush(k, w);
-        stringRedisTemplate.opsForList().trim(k, 0, MAX_SIZE - 1); // 每次只保留前20条历史数据
+        stringRedisTemplate.opsForList().trim(k, 0, MAX_SIZE - 1);
         stringRedisTemplate.expire(k, TTL_DAYS, TimeUnit.DAYS);
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("records", list(userId));
+        SearchHistoryAddVo data = new SearchHistoryAddVo();
+        data.setRecords(list(userId));
         return data;
     }
 

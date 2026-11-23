@@ -51,8 +51,8 @@ public class UserController {
      * @param loginForm 登录参数，包含手机号、验证码；或者手机号、密码
      */
     @PostMapping("/login")
-    public Result login(@RequestBody LoginFormDTO loginForm){
-        return userService.login(loginForm);
+    public Result login(@RequestBody LoginFormDTO loginForm) {
+        return Result.ok(userService.login(loginForm));
     }
 
     /**
@@ -140,16 +140,23 @@ public class UserController {
         if (userInfo == null) {
             userInfo = new UserInfo();
             userInfo.setUserId(userId);
-            userInfo.setFans(0);
             userInfo.setFollowee(0);
             userInfo.setCredits(0);
             userInfo.setLevel(0);
             userInfo.setCreateTime(LocalDateTime.now());
         }
-        userInfo.setCity(profile.getCity());
-        userInfo.setIntroduce(profile.getIntroduce());
-        userInfo.setGender(profile.getGender());
-        userInfo.setBirthday(profile.getBirthday());
+        if (profile.getCity() != null) {
+            userInfo.setCity(profile.getCity().trim());
+        }
+        if (profile.getIntroduce() != null) {
+            userInfo.setIntroduce(profile.getIntroduce().trim());
+        }
+        if (profile.getGender() != null) {
+            userInfo.setGender(profile.getGender());
+        }
+        if (profile.getBirthday() != null) {
+            userInfo.setBirthday(profile.getBirthday());
+        }
         userInfo.setUpdateTime(LocalDateTime.now());
 
         if (userInfoMapper.selectById(userId) == null) {

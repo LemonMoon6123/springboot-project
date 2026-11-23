@@ -5,8 +5,13 @@ import org.apache.ibatis.annotations.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import com.livehouse.vo.app.search.HotArtistVo;
+import com.livehouse.vo.app.search.SearchArtistRowVo;
+import com.livehouse.vo.app.search.SearchVenueItemVo;
+import com.livehouse.vo.app.search.WantRankItemVo;
+import com.livehouse.vo.app.show.ShowCardVo;
+
 import java.util.List;
-import java.util.Map;
 
 @Mapper
 public interface AppSearchMapper {
@@ -20,7 +25,7 @@ public interface AppSearchMapper {
                           @Param("priceMax") BigDecimal priceMax,
                           @Param("hasTicket") Integer hasTicket);
 
-    List<Map<String, Object>> selectSearchShows(@Param("keyword") String keyword,
+    List<ShowCardVo> selectSearchShows(@Param("keyword") String keyword,
                                                 @Param("city") String city,
                                                 @Param("artistId") Long artistId,
                                                 @Param("timeStart") LocalDateTime timeStart,
@@ -34,16 +39,18 @@ public interface AppSearchMapper {
 
     long countSearchArtists(@Param("keyword") String keyword);
 
-    List<Map<String, Object>> selectSearchArtists(@Param("keyword") String keyword,
-                                                    @Param("offset") long offset,
-                                                    @Param("size") long size);
+    List<SearchArtistRowVo> selectSearchArtists(@Param("keyword") String keyword,
+                                                @Param("offset") long offset,
+                                                @Param("size") long size);
 
     long countSearchVenues(@Param("keyword") String keyword, @Param("city") String city);
 
-    List<Map<String, Object>> selectSearchVenues(@Param("keyword") String keyword,
-                                                  @Param("city") String city,
-                                                  @Param("offset") long offset,
-                                                  @Param("size") long size);
+    List<SearchVenueItemVo> selectSearchVenues(@Param("keyword") String keyword,
+                                               @Param("city") String city,
+                                               @Param("offset") long offset,
+                                               @Param("size") long size);
 
-    List<Map<String, Object>> selectWantRankTop3();
+    List<WantRankItemVo> selectWantRankTop3();
+
+    List<HotArtistVo> selectHotArtists(@Param("limit") int limit);
 }

@@ -1,10 +1,16 @@
 package com.livehouse.service.app;
 
+import com.livehouse.vo.app.points.PointsExchangeVo;
+import com.livehouse.vo.app.points.PointsGoodsVo;
+import com.livehouse.vo.app.points.PointsLogListVo;
+
 import java.util.List;
-import java.util.Map;
 
 public interface AppPointsService {
-    List<Map<String, Object>> shop(Long userId);
-    Map<String, Object> logs(Long userId, int current, int size);
-    Map<String, Object> exchange(Long userId, Long goodsId, String idempotentKey);
+
+    List<PointsGoodsVo> shop(Long userId);
+
+    PointsLogListVo logs(Long userId, int current, int size);
+
+    PointsExchangeVo exchange(Long userId, Long goodsId, String idempotentKey);
 }

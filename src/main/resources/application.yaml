@@ -8,6 +8,10 @@ spring:
     url: jdbc:mysql://127.0.0.1:3306/livehouse_ticket?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: root
     password: root
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
   redis:
     host: 127.0.0.1
     port: 6379
@@ -60,6 +64,9 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 logging:
+  charset:
+    console: GBK
+    file: UTF-8
   level:
     com.livehouse: debug
 
@@ -67,7 +74,7 @@ livehouse:
   pay:
     mock-enabled: true
     wx:
-      app-id: ${WX_APPID:}
+      app-id: ${WX_APPID:wxd2e44c3158c309cb}
       mch-id: ${WX_MCHID:}
       api-v3-key: ${WX_APIV3_KEY:}
       cert-serial-no: ${WX_CERT_SERIAL:}
@@ -80,14 +87,15 @@ livehouse:
     refund-deadline-days: 7
   credit:
     rate-per-yuan: 0.05
-    issue-delay-hours: 24
-    expire-months: 24
-  wx-login:
-    mock-openid: true
-    mock-openid-prefix: dev_wx_openid_
-  # sms.fixed-login-code 仅 CI/冒烟可选；不配则随机 6 位写入 Redis，登录按 Redis 校验（与 /user/code + /user/login 老逻辑一致）
   upload:
     dir: frontend-livehouse/uploads
     url-prefix: /uploads/
   ticket:
     encryption-key: LiveHouse2024SecretKey!@#$%^&*()
+  # 高德地图 Web端(JS API) Key：https://console.amap.com/dev/key/app
+  # 坐标系使用 GCJ-02，与 tb_venue 经纬度、Redis GEO 一致
+  map:
+    amap-js-key: ${AMAP_JS_KEY:ddc40069235881db7f635103e27a2d7c}
+    # 地理编码请用控制台「Web 服务」类型 Key；未配置时尝试 amap-js-key（但功能可能不可用）
+    amap-web-key: ${AMAP_WEB_KEY:844b84942f3c277de9e98302789b3aad}
+    geocode-enabled: true
