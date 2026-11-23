@@ -15,7 +15,7 @@ public class LoginInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         String uri = request.getRequestURI();
-        // 管理后台（含数据大屏、通用 CRUD）不要求 C 端登录
+        // 管理后台不要求登录
         if (uri != null && (uri.startsWith("/admin") || uri.startsWith("/admin/"))) {
             return true;
         }
