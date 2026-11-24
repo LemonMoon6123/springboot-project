@@ -75,12 +75,12 @@ public class OrderTimeoutScheduledTask {
         log.info("开始取消超时订单，订单ID：{}", order.getId());
 
         boolean cancelled = ticketOrderService.update()
-                .set("orderStatus", 3)
-                .set("cancelTime", LocalDateTime.now())
-                .set("cancelReason", "超时未支付，系统自动关闭")
+                .set("order_status", 3)
+                .set("cancel_time", LocalDateTime.now())
+                .set("cancel_reason", "超时未支付，系统自动关闭")
                 .eq("id", order.getId())
-                .eq("orderStatus", 1)
-                .eq("payStatus", 0)
+                .eq("order_status", 1)
+                .eq("pay_status", 0)
                 .update();
         if (!cancelled) {
             log.info("订单已被其它路径取消或支付，跳过，订单ID：{}", order.getId());
@@ -95,10 +95,10 @@ public class OrderTimeoutScheduledTask {
             stringRedisTemplate.delete(userOrderStatusKey);
         } catch (Exception e) {
             ticketOrderService.update()
-                    .set("orderStatus", 1)
+                    .set("order_status", 1)
                     .eq("id", order.getId())
-                    .eq("orderStatus", 3)
-                    .eq("payStatus", 0)
+                    .eq("order_status", 3)
+                    .eq("pay_status", 0)
                     .update();
             throw e;
         }

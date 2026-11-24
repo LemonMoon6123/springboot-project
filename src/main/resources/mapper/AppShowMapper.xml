@@ -3,7 +3,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.livehouse.mapper.AppShowMapper">
 
-    <!-- 场次可展示：演出未开始、项目已上架、场次非已结束；至少一个票种上架 -->
+    <!-- 至少一个票种上架 -->
     <sql id="atLeastOneListedTicket">
         AND EXISTS (
             SELECT 1 FROM tb_ticket_type tt
@@ -22,7 +22,7 @@
         )
     </sql>
 
-    <!-- 项目最低价：该项目下所有场次、上架票种 price 的最小值 -->
+    <!-- 演出最低价：该演出下所有场次、上架票种 price 的最小值 -->
     <sql id="performanceMinListedTicketPrice">
         (SELECT MIN(tt.price)
          FROM tb_ticket_type tt

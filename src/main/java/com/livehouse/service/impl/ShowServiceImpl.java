@@ -128,7 +128,7 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
     }
 
     /**
-     * 根据城市查询演出（支持地理位置排序）
+     * 根据所选城市按查询演出（支持地理位置排序）
      */
     @Override
     public Result queryShowByCity(String city, Integer current, Double x, Double y) {
@@ -139,8 +139,8 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
             if (StrUtil.isNotBlank(city)) {
                 // 根据城市查询（需要关联场馆表）
                 page = query()
-                        .eq("status", 2) // 只查询售票中的演出
-                        .orderByDesc("start_time")
+                        .in("status", 1,2,3)
+                        .orderByAsc("start_time")
                         .page(new Page<>(current, DEFAULT_PAGE_SIZE));
                 // 过滤指定城市的演出
                 List<Show> filteredShows = page.getRecords().stream()
@@ -153,8 +153,8 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
             } else {
                 // 查询所有售票中的演出
                 page = query()
-                        .eq("status", 2)
-                        .orderByDesc("start_time")
+                        .in("status", 1,2,3)
+                        .orderByAsc("start_time")
                         .page(new Page<>(current, DEFAULT_PAGE_SIZE));
             }
             return Result.ok(page.getRecords());
@@ -165,7 +165,7 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
         int end = current * DEFAULT_PAGE_SIZE;
 
         // 3. 从Redis GEO查询附近的场馆
-        String key = VENUE_GEO_KEY + (StrUtil.isNotBlank(city) ? city : "all");
+        String key = VENUE_GEO_KEY + city;
         GeoResults<RedisGeoCommands.GeoLocation<String>> results = stringRedisTemplate.opsForGeo().search(
                 key,
                 GeoReference.fromCoordinate(x, y),
@@ -201,7 +201,7 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements IS
 
         List<Show> shows = query()
                 .in("venue_id", venueIds)
-                .eq("status", 2) // 售票中
+                .in("status", 1,2,3) // 售票中
                 .orderByAsc("start_time") // 按时间排序
                 .list();
 

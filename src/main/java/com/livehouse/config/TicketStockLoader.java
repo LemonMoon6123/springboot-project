@@ -33,8 +33,7 @@ public class TicketStockLoader implements ApplicationRunner {
         log.info("开始预热票种库存数据到Redis...");
         
         try {
-            List<TicketType> ticketTypes = ticketTypeService.query().gt("left_stock", 0) // 有剩余库存
-                    .list();
+            List<TicketType> ticketTypes = ticketTypeService.query().gt("left_stock", 0).list();
 
             if (ticketTypes.isEmpty()) {
                 log.warn("没有找到在售票种数据，跳过库存预热");

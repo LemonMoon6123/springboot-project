@@ -70,12 +70,12 @@ public class OrderTimeoutConsumer {
 
             // CAS 取消：与定时任务互斥，避免两边各归还一次库存
             boolean cancelled = ticketOrderService.update()
-                    .set("orderStatus", 3)
-                    .set("cancelTime", LocalDateTime.now())
-                    .set("cancelReason", "超时未支付")
+                    .set("order_status", 3)
+                    .set("cancel_time", LocalDateTime.now())
+                    .set("cancel_reason", "超时未支付")
                     .eq("id", message.getOrderId())
-                    .eq("orderStatus", 1)
-                    .eq("payStatus", 0)
+                    .eq("order_status", 1)
+                    .eq("pay_status", 0)
                     .update();
             if (!cancelled) {
                 log.info("订单状态已变更，跳过超时取消，订单ID：{}", message.getOrderId());

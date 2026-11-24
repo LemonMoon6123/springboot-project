@@ -144,6 +144,7 @@ public class AppOrderServiceImpl implements AppOrderService {
             throw new StatusCodeException(StatusCode.STOCK_NOT_ENOUGH, ctx.blockReason);
         }
 
+        // 防止用户因未支付该票单而重复建单
         String userOrderStatusKey = "user:order:status:" + userId + ":" + request.getTicketTypeId();
         if ("PENDING".equals(stringRedisTemplate.opsForValue().get(userOrderStatusKey))) {
             TicketOrder pending = ticketOrderService.lambdaQuery()

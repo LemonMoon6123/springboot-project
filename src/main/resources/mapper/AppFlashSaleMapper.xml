@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.livehouse.mapper.AppFlashSaleMapper">
+
+    <resultMap id="FlashSaleCandidateMap" type="com.livehouse.vo.app.show.FlashSaleCandidateVo">
+        <result column="ticketTypeId" property="ticketTypeId"/>
+        <result column="showId" property="showId"/>
+        <result column="ticketTypeName" property="ticketTypeName"/>
+        <result column="price" property="price"/>
+        <result column="saleStartTime" property="saleStartTime"/>
+        <result column="leftStock" property="leftStock"/>
+        <result column="totalStock" property="totalStock"/>
+        <result column="performanceId" property="performanceId"/>
+        <result column="showStartTime" property="showStartTime"/>
+        <result column="title" property="title"/>
+        <result column="artist" property="artist"/>
+        <result column="wantCount" property="wantCount"/>
+        <result column="venueName" property="venueName"/>
+        <result column="city" property="city"/>
+        <result column="cover" property="cover"/>
+    </resultMap>
+
+    <select id="selectUpcomingSaleCandidates" resultMap="FlashSaleCandidateMap">
+        SELECT tt.id AS ticketTypeId,
+               tt.show_id AS showId,
+               tt.name AS ticketTypeName,
+               tt.price AS price,
+               tt.sale_start_time AS saleStartTime,
+               IFNULL(tt.left_stock, 0) AS leftStock,
+               IFNULL(tt.total_stock, 0) AS totalStock,
+               s.performance_id AS performanceId,
+               s.start_time AS showStartTime,
+               COALESCE(p.title, s.title) AS title,
+               COALESCE(p.artist_name, s.artist) AS artist,
+               COALESCE(p.want_count, 0) AS wantCount,
+               v.name AS venueName,
+               v.city AS city,
+               COALESCE(p.poster, s.image) AS cover
+        FROM tb_ticket_type tt
+        INNER JOIN tb_show s ON s.id = tt.show_id
+        INNER JOIN tb_performance p ON p.id = s.performance_id
+        INNER JOIN tb_venue v ON v.id = s.venue_id
+        WHERE tt.status = 1
+          AND p.status = 2
+          AND s.status IN (1, 2, 3)
+          AND s.start_time &gt; NOW()
+          AND tt.sale_start_time &gt; NOW()
+          AND tt.sale_end_time &gt;= NOW()
+          AND TIMESTAMPDIFF(SECOND, NOW(), tt.sale_start_time) &lt;= 86400
+    </select>
+
+</mapper>

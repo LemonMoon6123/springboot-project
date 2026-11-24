@@ -46,8 +46,7 @@ public class RedisGeoDataLoader implements ApplicationRunner {
             }
 
             // 2. 按城市分组
-            Map<String, List<Venue>> venuesByCity = venues.stream()
-                    .collect(Collectors.groupingBy(Venue::getCity));
+            Map<String, List<Venue>> venuesByCity = venues.stream().collect(Collectors.groupingBy(Venue::getCity));
 
             // 3. 为每个城市加载GEO数据
             for (Map.Entry<String, List<Venue>> entry : venuesByCity.entrySet()) {
@@ -80,8 +79,7 @@ public class RedisGeoDataLoader implements ApplicationRunner {
         for (Venue venue : venues) {
             if (venue.getLongitude() != null && venue.getLatitude() != null) {
                 Point point = new Point(venue.getLongitude(), venue.getLatitude());
-                RedisGeoCommands.GeoLocation<String> geoLocation = 
-                    new RedisGeoCommands.GeoLocation<>(venue.getId().toString(), point);
+                RedisGeoCommands.GeoLocation<String> geoLocation = new RedisGeoCommands.GeoLocation<>(venue.getId().toString(), point);
                 geoLocations.add(geoLocation);
             }
         }
